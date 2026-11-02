@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64">
+  <title>Splicelet</title>
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#287fcb"/>
+      <stop offset="1" stop-color="#164b91"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#tile)"/>
+  <path d="M16 18h20l-6 12H16a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" fill="#fff"/>
+  <path d="M41 18h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H35Z" fill="#79e4cf"/>
+  <path d="M16 34h12l-6 12h-6a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2Z" fill="#79e4cf"/>
+  <path d="M33 34h15a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H27Z" fill="#fff"/>
+</svg>

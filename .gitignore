@@ -1,0 +1,6 @@
+.envs/
+.conda-pkgs/
+artifacts/
+media/
+__pycache__/
+

@@ -1,0 +1,11 @@
+name: video-tech
+channels:
+  - conda-forge
+  - nodefaults
+dependencies:
+  - python=3.12
+  - pyside6
+  - qt6-multimedia
+  - av
+  - numpy
+  - ffmpeg
