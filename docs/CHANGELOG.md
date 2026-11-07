@@ -4,6 +4,17 @@ The first public source snapshot is version 1.2.1. Earlier local development is
 summarized below; application versions and project file format versions are
 independent of each other and of the public Git history.
 
+## 1.3.0 — Unreleased
+
+### Added
+
+- Orange playhead head and line indicate active timeline Follow in both themes.
+
+### Changed
+
+- Pressing the ruler or a clip immediately releases Follow, including rectangle
+  selection and trim edges. All zoom operations, including Z, preserve Follow.
+
 ## 1.2.1 — 2026-11-02
 
 Source snapshot prepared for the first public publication, under GPL-3.0-or-later.

@@ -101,12 +101,12 @@ Item {
     }
     function pan(steps) { followEnabled=false; viewStart = clampView(viewStart-steps*visibleDuration*.15) }
     function zoomSelection() {
-        followEnabled=false
         let range = preview.selectionRange
         if (!preview.selectionCount) { viewDuration=0; viewStart=0; return }
         let duration = Math.max(.1,(range.end-range.start)*1.12)
         viewDuration = duration>=totalDuration ? 0 : duration
-        viewStart = clampView((range.start+range.end-visibleDuration)/2)
+        if (followEnabled) followPlayhead()
+        else viewStart = clampView((range.start+range.end-visibleDuration)/2)
     }
     function chooseTick() {
         let minimum = visibleDuration*95/span
@@ -189,6 +189,7 @@ Item {
             preview.selectClips(hits,lane,selectionBaseline,toggle)
         }
         onPressed: function(mouse) {
+            timeline.followEnabled=false
             timeline.interacted()
             start=Qt.point(mouse.x,mouse.y); current=start; selecting=false; gesture=""
             lane=preview.selectionLane
@@ -201,7 +202,7 @@ Item {
             if (!gesture && Math.hypot(current.x-start.x,current.y-start.y)<4) return
             if (!gesture) {
                 gesture=mouse.y>=height || Math.abs(mouse.y-start.y)>=Math.abs(mouse.x-start.x) ? "box" : "scrub"
-                if (gesture==="scrub") { timeline.followEnabled=false; preview.beginScrub() }
+                if (gesture==="scrub") preview.beginScrub()
             }
             if (gesture==="scrub") preview.seek(timeline.positionAt(mouse.x,mouse.modifiers))
             else if (current.y>=height || selecting) {
@@ -212,7 +213,7 @@ Item {
         onReleased: function(mouse) {
             if (gesture==="scrub") preview.endScrub(timeline.positionAt(mouse.x,mouse.modifiers))
             else if (!selecting) {
-                timeline.followEnabled=false; preview.beginScrub(); preview.endScrub(timeline.positionAt(mouse.x,mouse.modifiers))
+                preview.beginScrub(); preview.endScrub(timeline.positionAt(mouse.x,mouse.modifiers))
             }
             selecting=false
         }
@@ -436,6 +437,7 @@ Item {
                 property bool moved: false
                 property var moving: []
                 onPressed: function(mouse) {
+                    timeline.followEnabled=false
                     timeline.interacted()
                     moved=false
                     moving=preview.movingClips(modelData.index)
@@ -514,6 +516,7 @@ Item {
                             cursorShape: Qt.SizeHorCursor
                             preventStealing: true
                             onPressed: function(mouse) {
+                                timeline.followEnabled=false
                                 timeline.interacted()
                                 preview.movingClips(clipEdges.modelData.index)
                                 let x=mapToItem(timeline,mouse.x,mouse.y).x
@@ -589,6 +592,7 @@ Item {
         id: playhead
         z: 3
         objectName: "timelinePlayhead"
+        readonly property color color: timeline.followEnabled ? theme.followPlayhead : theme.playhead
         x: timeline.xAt(preview.position); y: 24; width: 2; height: preview.hasAudio ? timeline.audioLaneY+timeline.audioLaneHeight-20 : 72
         readonly property real pixelRatio: Screen.devicePixelRatio
         readonly property real pixelFraction: {
@@ -599,18 +603,18 @@ Item {
         Rectangle {
             x: -playhead.pixelFraction/playhead.pixelRatio
             width: 1/playhead.pixelRatio; height: parent.height
-            color: theme.playhead; opacity: 1-playhead.pixelFraction
+            color: playhead.color; opacity: 1-playhead.pixelFraction
         }
         Rectangle {
             x: (1-playhead.pixelFraction)/playhead.pixelRatio
-            width: playhead.width-1/playhead.pixelRatio; height: parent.height; color: theme.playhead
+            width: playhead.width-1/playhead.pixelRatio; height: parent.height; color: playhead.color
         }
         Rectangle {
             x: playhead.width-playhead.pixelFraction/playhead.pixelRatio
             width: 1/playhead.pixelRatio; height: parent.height
-            color: theme.playhead; opacity: playhead.pixelFraction
+            color: playhead.color; opacity: playhead.pixelFraction
         }
-        Rectangle { x: -5; y: -5; width: 12; height: 13; radius: 2; color: theme.playhead }
+        Rectangle { x: -5; y: -5; width: 12; height: 13; radius: 2; color: playhead.color }
     }
     ScrollBar {
         id: scroll

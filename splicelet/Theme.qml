@@ -26,5 +26,6 @@ QtObject {
     readonly property color caption: dark ? "#dd253141" : "#ddf8fafc"
     readonly property color wave: dark ? "#91bfd8" : "#4c7892"
     readonly property color playhead: dark ? "#94c9ff" : "#184f82"
+    readonly property color followPlayhead: dark ? "#ffbc70" : "#b84f00"
     readonly property color track: dark ? "#435267" : "#d6e0eb"
 }

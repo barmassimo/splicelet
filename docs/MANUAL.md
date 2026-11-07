@@ -170,8 +170,10 @@ Separate the clips before cutting inside that interval.
 | Center playhead while zoomed | F or View > Follow |
 
 Follow allows empty space beyond project edges to keep the playhead centered.
-Zoom preserves Follow; ruler interaction, manual panning, scrollbar use or Z
-releases it. Import/open resets Follow; it is not saved with projects.
+The playhead head and line turn orange while Follow is active, in both themes.
+Zoom (including trackpad zoom and Z) preserves Follow. Pressing the ruler or a
+clip (including its trim edges), rectangle selection, manual panning or scrollbar
+use releases it. Import/open resets Follow; it is not saved with projects.
 
 Thumbnails use sparse keyframes and can repeat at high zoom; they are approximate.
 The waveform combines both channels' source peaks before fades/listening gain.

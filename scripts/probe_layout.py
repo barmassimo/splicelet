@@ -143,13 +143,18 @@ try:
     timeline.setProperty('viewDuration',duration)
     timeline.setProperty('viewStart',duration)
     original_clips=preview._clips.snapshot()
-    def wheel_at(y,pixels,angles):
+    def wheel_at(y,pixels,angles,modifiers=Qt.KeyboardModifier.NoModifier):
         point=timeline.mapToScene(QPointF(timeline.width()/2,y))
+        QTest.mouseMove(window,point.toPoint()); QTest.qWait(10)
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            QTest.keyPress(window,Qt.Key.Key_Control)
         event=QWheelEvent(point,QPointF(window.mapToGlobal(point.toPoint())),pixels,angles,
-                          Qt.MouseButton.NoButton,Qt.KeyboardModifier.NoModifier,Qt.ScrollPhase.ScrollUpdate,False,
+                          Qt.MouseButton.NoButton,modifiers,Qt.ScrollPhase.ScrollUpdate,False,
                           Qt.MouseEventSource.MouseEventSynthesizedBySystem)
         QCoreApplication.sendEvent(window,event)
         QTest.qWait(30)
+        if modifiers & Qt.KeyboardModifier.ControlModifier:
+            QTest.keyRelease(window,Qt.Key.Key_Control)
     for y in (20,65):
         for pixels,angles in ((QPoint(-45,0),QPoint()),(QPoint(0,-45),QPoint()),(QPoint(-20,-15),QPoint(-60,-30)),(QPoint(),QPoint(-120,0)),(QPoint(),QPoint(0,-120))):
             old_start=timeline.property('viewStart')
@@ -181,6 +186,25 @@ try:
         preview.seek(target); wait(lambda:not preview.busy); QTest.qWait(30)
         assert_centered()
     preview.seek(preview.duration/2); wait(lambda:not preview.busy)
+    for y in (20,65,timeline.property('audioLaneY')+20):
+        for pixels,angles in ((QPoint(0,40),QPoint()),(QPoint(40,0),QPoint()),(QPoint(),QPoint(0,120))):
+            old=timeline.property('visibleDuration')
+            wheel_at(y,pixels,angles,Qt.KeyboardModifier.ControlModifier)
+            assert timeline.property('visibleDuration')<old,(y,pixels,angles,old,timeline.property('visibleDuration'))
+            assert_centered()
+    original_theme=preview.darkTheme
+    QTest.mouseMove(window,QPoint(10,10)); QTest.qWait(50)
+    for dark in (False,True):
+        preview.setDarkTheme(dark); QTest.qWait(50)
+        active_color=playhead.property('color')
+        window.grabWindow().save(str(OUT/('follow-dark.png' if dark else 'follow-light.png')))
+        toggle_follow()
+        assert playhead.property('color')!=active_color
+        window.grabWindow().save(str(OUT/('manual-dark.png' if dark else 'manual-light.png')))
+        toggle_follow()
+        assert playhead.property('color')==active_color
+    preview.setDarkTheme(original_theme)
+    timeline.setProperty('viewDuration',preview.duration/20)
     QTest.keyClick(window,Qt.Key.Key_Plus,Qt.KeyboardModifier.ControlModifier)
     QTest.qWait(30); assert_centered()
     preview.toggle(); wait(lambda:preview.playing and not preview.busy)
@@ -199,11 +223,12 @@ try:
     QMetaObject.invokeMethod(view,'open'); QTest.qWait(50)
     window.grabWindow().save(str(OUT/'follow-menu.png'))
     QMetaObject.invokeMethod(view,'close'); QTest.qWait(30)
-    # A horizontal ruler drag releases tracking; a press alone may start a box selection.
+    # Pressing releases tracking before either scrub or rectangle selection begins.
     preview.seek(0); wait(lambda:not preview.busy)
     point=timeline.mapToScene(QPointF(timeline.width()*.65,20)).toPoint()
     expected=(timeline.width()*.65-timeline.property('inset'))*timeline.property('secondsPerPixel')+timeline.property('viewStart')
     QTest.mousePress(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.AltModifier,point)
+    assert not follow.property('checked')
     QTest.mouseMove(window,point+QPoint(25,0)); QTest.qWait(30)
     assert not follow.property('checked')
     QTest.mouseRelease(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.AltModifier,point+QPoint(25,0))
@@ -217,12 +242,52 @@ try:
     QTest.mouseClick(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,point)
     assert not follow.property('checked')
     toggle_follow(); QTest.keyClick(window,Qt.Key.Key_Z); QTest.qWait(30)
+    assert follow.property('checked')
+    # Both clip lanes, trim edges and rectangle selection release Follow on press.
+    timeline.setProperty('viewDuration',preview.duration/4)
+    preview.seek(preview.duration/2); wait(lambda:not preview.busy)
+    for y in (65,timeline.property('audioLaneY')+20):
+        point=timeline.mapToScene(QPointF(timeline.width()/2,y)).toPoint()
+        QTest.mousePress(window,Qt.MouseButton.LeftButton,pos=point)
+        assert not follow.property('checked')
+        QTest.mouseRelease(window,Qt.MouseButton.LeftButton,pos=point)
+        toggle_follow()
+    timeline.setProperty('viewDuration',0)
+    def visual_item(name,item):
+        if item.objectName()==name: return item
+        for child in item.childItems():
+            found=visual_item(name,child)
+            if found is not None: return found
+    def edit_content(snapshot):
+        video,audio,linked,lane,*ids=snapshot
+        return video[0],video[2:],audio[0],audio[2:],linked,ids
+    for name in ('trim-left-0','trim-right-1000000'):
+        edge=visual_item(name,timeline)
+        point=edge.mapToScene(QPointF(edge.width()/2,edge.height()/2)).toPoint()
+        before_edge=preview._clips.snapshot()
+        QTest.mousePress(window,Qt.MouseButton.LeftButton,pos=point)
+        assert not follow.property('checked')
+        QTest.mouseRelease(window,Qt.MouseButton.LeftButton,pos=point)
+        wait(lambda:not preview.busy)
+        assert edit_content(preview._clips.snapshot())==edit_content(before_edge),name
+        toggle_follow()
+    point=timeline.mapToScene(QPointF(timeline.width()*.2,20)).toPoint()
+    QTest.mousePress(window,Qt.MouseButton.LeftButton,pos=point)
     assert not follow.property('checked')
+    QTest.mouseMove(window,point+QPoint(100,55)); QTest.qWait(30)
+    assert window.findChild(QQuickItem,'selectionRectangle').isVisible()
+    QTest.mouseRelease(window,Qt.MouseButton.LeftButton,pos=point+QPoint(100,55))
+    wait(lambda:not preview.busy)
+    # Fit-to-selection also preserves Follow, including with a selection present.
+    preview.selectClip(0)
+    toggle_follow(); QTest.keyClick(window,Qt.Key.Key_Z); QTest.qWait(30)
+    assert follow.property('checked')
+    toggle_follow()
     QTest.keyClick(window,Qt.Key.Key_F11); QTest.qWait(30)
     assert window.property('fullScreen')
     QTest.keyClick(window,Qt.Key.Key_F11); QTest.qWait(30)
     assert not window.property('fullScreen')
-    assert preview._clips.snapshot()==original_clips
+    assert edit_content(preview._clips.snapshot())==edit_content(original_clips)
     timeline.setProperty('viewDuration',0); timeline.setProperty('viewStart',0)
     passed('follow_shortcut_menu_centered_playback_seek_edges_zoom_and_manual_release')
     undo=window.findChild(QObject,'undoAction'); redo=window.findChild(QObject,'redoAction')
