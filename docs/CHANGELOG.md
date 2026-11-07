@@ -4,6 +4,15 @@ The first public source snapshot is version 1.2.1. Earlier local development is
 summarized below; application versions and project file format versions are
 independent of each other and of the public Git history.
 
+## 1.3.1 — Unreleased
+
+### Fixed
+
+- Overlap preview skips expired composition work using the transport clock and
+  converts only the source frames needed for presentation, avoiding accumulated
+  slow motion followed by catch-up. Paused seeks and export retain their complete
+  source-PTS schedules; audio processing is unchanged.
+
 ## 1.3.0 — Unreleased
 
 ### Added

@@ -149,7 +149,7 @@ integration fixture. Report paths are relative to `artifacts/`.
 | `probe_timeline_edits.py` | Gaps, mapping, joins, reserves, duplication and history | `timeline-tests/report.json` |
 | `probe_clip_effects.py` | PCM/video fades, seeks, joins and preservation | `effects-tests/report.json` |
 | `probe_audio_tracks.py` | Independent lanes, mapping, gestures and persistence | `audio-track-tests/report.json` |
-| `probe_crossfades.py` | Mixed PCM/video, PTS schedules, window phase, overlap interaction and cancellation | `crossfade-tests/report.json` |
+| `probe_crossfades.py` | Mixed PCM/video, PTS schedules, preview clock-jump recovery and VFR frame holds, exact paused/offline frames, export window phase, overlap interaction and cancellation | `crossfade-tests/report.json` |
 | `probe_multi_source.py` | Mixed sources/canvases/cadences, PCM, projects, library gestures and safety | `multi-source-tests/report.json` |
 | `probe_timeline_visuals.py` | Peaks, thumbnails, retained ranges, caches and QML zoom/pan | `timeline-visual-tests/report.json` |
 | `probe_export_options.py` | Export scope/defaults, normalization, AAC references and cancellation | `export-option-tests/report.json` |

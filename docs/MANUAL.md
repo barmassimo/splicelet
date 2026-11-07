@@ -71,6 +71,10 @@ Full screen shows only video; keyboard controls remain available.
 Ruler and clip double-click seeks snap to boundaries within 8 pixels; hold
 **Alt** to bypass snapping. Numeric and keyboard seeks do not snap.
 
+During crossfades, preview drops expired video frames to follow the playback
+clock instead of accumulating slow motion and then catching up. Demanding media
+can still stutter; export retains all scheduled frames.
+
 The speaker mutes without forgetting its level. Listening volume ranges from
 **0–200%**, initially **100%**, marked by a red tick. Above 100% can distort
 loud material. Listening volume and mute do not affect exports or project data.

@@ -10,6 +10,7 @@ import sys
 import tempfile
 import threading
 import time
+from unittest.mock import patch
 
 os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
 os.environ.setdefault('QT_QUICK_BACKEND','software')
@@ -30,6 +31,7 @@ from splicelet.source import Decoder,Job,inspect_and_index
 from splicelet.exporting import ExportSpec,ExportTask
 from splicelet.controller import Preview,FrameProvider
 from splicelet import project
+from splicelet import source as source_module
 
 OUT = ROOT/'artifacts/crossfade-tests'
 OUT.mkdir(parents=True,exist_ok=True)
@@ -38,9 +40,11 @@ checks = []
 def passed(name):
     checks.append(name); print('PASS',name,flush=True)
 
-def read(kind,job,sample_format='flt'):
-    worker = Decoder(kind,sample_format=sample_format,bytes_per_sample=4 if sample_format=='flt' else 2)
-    worker.request(job.generation,job)
+def read(kind,job,sample_format='flt',realtime=False,preview_position=None):
+    worker = Decoder(kind,sample_format=sample_format,bytes_per_sample=4 if sample_format=='flt' else 2,realtime=realtime)
+    with worker.condition:
+        worker.request(job.generation,job)
+        if preview_position is not None: worker.set_preview_position(job.generation,preview_position)
     result = []; deadline = time.monotonic()+30
     try:
         while True:
@@ -119,6 +123,58 @@ seek_frames = read('video',job(position=1.5,duration=1.8))
 assert np.array_equal(rgb(seek_frames[0][2]),rgb(frames[45][2]))
 passed('video_linear_mix_monotonic_source_pts_frame_schedule_and_seek')
 
+# Hold one in-flight overlap frame while the audio clock advances. The worker
+# must bypass obsolete composition/conversion, not replay the accumulated delay.
+entered,release = threading.Event(),threading.Event()
+class DelayedVideo(Decoder):
+    def put(self,job,item):
+        if abs(item[1]-1.)<1e-9:
+            entered.set()
+            if not release.wait(5): raise RuntimeError('Preview test gate timeout')
+        return super().put(job,item)
+
+worker = DelayedVideo('video',realtime=True)
+recovered = []
+deadline = time.monotonic()+10
+try:
+    with patch('splicelet.source.source_rgb',wraps=source_module.source_rgb) as convert:
+        worker.request(1,job())
+        advanced = False
+        while True:
+            if entered.is_set() and not advanced:
+                worker.set_preview_position(1,1.75)
+                # Stale GUI updates must not overwrite the current job clock.
+                worker.set_preview_position(0,0.)
+                advanced = True; release.set()
+            item = worker.take_video()
+            if item: recovered.append(item)
+            count,_,eof,error = worker.status()
+            assert not error,error
+            if eof and not count: break
+            assert time.monotonic()<deadline,'Preview recovery timeout'
+            time.sleep(.001)
+        assert advanced
+        expected_frames = [f for f in frames if f[1]<=1.+1e-9 or f[1]>=1.75-1/30-1e-9]
+        assert np.allclose([f[1] for f in recovered],[f[1] for f in expected_frames])
+        assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(recovered,expected_frames))
+        contributions = sum(2 if 1.<=f[1]<2. else 1 for f in recovered)
+        assert convert.call_count<=contributions+2,'Skipped source frames were still converted'
+    # A seek resets the clock and must still deliver exact source-grid images.
+    paused = replace(job(position=1.5,duration=1.8),generation=2,playing=False)
+    with worker.condition:
+        worker.request(2,paused)
+        assert worker._preview_position is None
+finally:
+    release.set(); worker.close(); worker.thread.join(3)
+passed('preview_clock_jump_skips_obsolete_overlap_work_and_preserves_remaining_pixels')
+paused_frames = read('video',replace(job(position=1.5,duration=1.8),playing=False),realtime=True,preview_position=2.)
+assert len(paused_frames)==5 and paused_frames[0][1]==1.5
+assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(paused_frames,seek_frames))
+offline_frames = read('video',job(),preview_position=1.75)
+assert [f[1] for f in offline_frames]==[f[1] for f in frames]
+assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(offline_frames,frames))
+passed('paused_preview_and_offline_workers_keep_exact_frames_despite_clock_updates')
+
 def spec(start=0.,end=3.):
     return ExportSpec(str(source),0,len(pts),pts[0],4000,base,0.,audio,
                       parts=model.video.parts(),timeline_start=start,timeline_end=end,
@@ -177,6 +233,12 @@ assert vm.split_at(.6) and vm.move(1,.4)
 vjob = Job(1,str(vfr),0.,1.,float(vm.duration),True,effects=vm.effect_spans(),parts=vm.parts(),width=320,height=180,source_times=tuple(map(float,vtimes)))
 mixed_frames = read('video',vjob)
 assert np.allclose([f[1] for f in mixed_frames],[t for t,_ in vm.frames()],atol=1e-9)
+for clock in (.51,.79):
+    caught_up = read('video',vjob,realtime=True,preview_position=clock)
+    first = max(i for i,frame in enumerate(mixed_frames) if frame[1]<=clock)
+    assert [f[1] for f in caught_up]==[f[1] for f in mixed_frames[first:]]
+    assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(caught_up,mixed_frames[first:]))
+passed('preview_recovery_keeps_covering_vfr_frame_and_off_grid_boundary')
 vspec = ExportSpec(str(vfr),0,len(vpts),vpts[0],round(Fraction(23,10)/vbase),vbase,1.,None,
                    parts=vm.parts(),timeline_start=0.,timeline_end=float(vm.duration),audio_parts=(),audio_effects=(),
                    video_effects=vm.effect_spans(),width=320,height=180,source_pts=vpts)

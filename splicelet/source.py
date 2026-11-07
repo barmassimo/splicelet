@@ -5,6 +5,7 @@ import math
 from fractions import Fraction
 import hashlib
 import json
+from itertools import chain, pairwise
 from pathlib import Path
 import threading
 
@@ -96,8 +97,10 @@ def configure(stream):
 
 class Decoder:
     """One pending job, bounded output, cancellation at each decoded frame."""
-    def __init__(self, kind, rate=48000, sample_format='flt', bytes_per_sample=4):
+    def __init__(self, kind, rate=48000, sample_format='flt', bytes_per_sample=4, realtime=False):
         self.kind = kind
+        self.realtime = realtime
+        self._preview_position = None
         self.rate = rate
         self.sample_format = sample_format
         self.sample_bytes = bytes_per_sample * 2
@@ -115,12 +118,24 @@ class Decoder:
     def request(self, generation, job=None):
         with self.condition:
             self.generation = generation
+            self._preview_position = None
             self.pending = job
             self.queue.clear()
             self.queued_bytes = 0
             self.eof = False
             self.error = None
             self.condition.notify_all()
+
+    def set_preview_position(self,generation,position):
+        """Opt-in preview clock; offline/export workers always render every PTS."""
+        with self.condition:
+            if self.realtime and generation==self.generation:
+                self._preview_position = position
+
+    def _expired_video(self,job,end):
+        with self.condition:
+            return (self.realtime and job.playing and job.generation==self.generation
+                    and self._preview_position is not None and end<=self._preview_position+1e-9)
 
     def stale(self, job):
         with self.condition:
@@ -385,17 +400,21 @@ class Decoder:
                     if job.sources and not source_for(job.sources,part.first_frame).has_video: continue
                     local = part_job(job,part)
                     container = av.open(local.path)
-                    readers.append([part,container,None,None,None,local.origin])
+                    readers.append([part,container,None,None,None,local.origin,None])
                     stream = container.streams.video[0]; configure(stream)
                     target = part.source_start+max(start,job.position)-part.start+local.origin
                     container.seek(max(0,int(Fraction(str(target))/stream.time_base)),stream=stream,backward=True)
                     readers[-1][2] = iter(container.decode(stream))
-                for stamp in interval_frames(active,job.source_times,max(start,job.position),end,job.fps):
+                stamps = interval_frames(active,job.source_times,max(start,job.position),end,job.fps)
+                for stamp,frame_end in pairwise(chain(stamps,(end,))):
                     if stamp<job.position-1e-9: continue
                     if self.stale(job): return
+                    # Retain the frame covering the clock, including sparse/VFR
+                    # intervals, but do not blend frames whose display time ended.
+                    if self._expired_video(job,frame_end): continue
                     rgb = None
                     for reader in readers:
-                        part,container,frames,current,following,origin = reader
+                        part,container,frames,current,following,origin,converted = reader
                         target = part.source_start+stamp-part.start
                         while following is None or following[0]<=target+1e-9:
                             if following is not None: current = following
@@ -404,12 +423,22 @@ class Decoder:
                             if frame is None:
                                 following = (float('inf'),None)
                                 break
-                            following = (float(frame.pts*frame.time_base)-origin,source_rgb(frame,job,part))
+                            following = (float(frame.pts*frame.time_base)-origin,
+                                         frame if self.realtime else source_rgb(frame,job,part))
                         reader[3],reader[4] = current,following
                         if current is None: continue
+                        if self.realtime:
+                            # Decode references to catch up, converting only the
+                            # selected source image. Cache held frames per reader.
+                            if converted is None or converted[0] is not current:
+                                converted = (current,source_rgb(current[1],job,part))
+                                reader[6] = converted
+                            pixels = converted[1]
+                        else:
+                            pixels = current[1]
                         span = spans[part.clip_id]
                         gain = video_gain(stamp,span)*cross_gain(stamp,span)
-                        contribution = current[1] if len(readers)==1 and gain==1. else current[1].astype(np.float32)*gain
+                        contribution = pixels if len(readers)==1 and gain==1. else pixels.astype(np.float32)*gain
                         rgb = contribution if rgb is None else rgb+contribution
                     if rgb is None: rgb = np.zeros((job.height,job.width,3),dtype=np.uint8)
                     elif rgb.dtype!=np.uint8: rgb = np.clip(np.rint(rgb),0,255).astype(np.uint8)

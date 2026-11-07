@@ -18,6 +18,7 @@ class Queue:
     def __init__(self): self.frames = []
     def status(self): return len(self.frames),0,False,''
     def take_video(self): return self.frames.pop(0) if self.frames else None
+    def set_preview_position(self,generation,position): self.preview_clock = (generation,position)
 
 
 class Sink:
@@ -49,6 +50,7 @@ try:
         preview._advance()
         positions.append(preview.position)
         assert abs(preview.position-clock)<1e-6,(clock,stamp,preview.position)
+        assert preview.video.preview_clock==(preview._generation,clock)
     assert positions==[1.,2.,3.,4.,5.]
     checks.append('audio_clock_cursor_during_slow_video_and_catchup')
     assert 'Frame 151 /' in preview.frameLabel

@@ -165,7 +165,7 @@ class Preview(QObject):
             self.sink.setBufferSize(round(48000 * 2 * self._format.bytesPerSample() * .12))
             self.sink.setVolume(0. if muted else self._volume)
         self._io = None
-        self.video = Decoder('video')
+        self.video = Decoder('video',realtime=True)
         self.audio = Decoder('audio', sample_format='flt' if self._format.sampleFormat()==QAudioFormat.SampleFormat.Float else 's16', bytes_per_sample=self._format.bytesPerSample())
         self.indexed.connect(self._receive_index,Qt.ConnectionType.QueuedConnection)
         self.sourceIndexed.connect(self._receive_source,Qt.ConnectionType.QueuedConnection)
@@ -1319,6 +1319,7 @@ class Preview(QObject):
                 if 'Underrun' not in str(self.sink.error()):
                     raise RuntimeError(f'Audio output: {self.sink.error()}')
         clock = min(self._duration,self._clock())
+        self.video.set_preview_position(self._generation,clock)
         latest = None
         while True:
             if self._next_frame is None:

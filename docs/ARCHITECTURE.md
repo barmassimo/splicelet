@@ -111,8 +111,15 @@ composition; QML opacity is unity there. Fade edits invalidate cached composites
 After buffering, playback follows `QAudioSink.processedUSecs()`, with wall-clock
 fallback when audio is unavailable. The playhead/time display follows this clock
 each tick independently of video arrival. Displayed-frame position is separate
-for frame count and video envelopes; delayed decoding can still cause video lag.
-Paused seeks stay on the source-PTS grid.
+for frame count and video envelopes. Only the GUI's video decoder opts into
+real-time recovery: generation-scoped clock updates let overlap composition skip
+frames whose display intervals have already ended. The frame covering the clock
+is retained, including sparse/VFR intervals and off-grid boundaries. During
+catch-up, reference frames are still decoded, but RGB conversion is deferred to
+the selected source frames, with one converted held image cached per reader.
+New requests clear the clock. Paused seeks stay on the source-PTS grid; offline
+and export decoders keep every scheduled frame. Slow decoding can still cause
+stutter or lag when the source cannot be decoded in real time.
 
 The sink prefers float PCM with int16 fallback. Listening gain is preview-only:
 up to 100% uses sink attenuation; above 100% applies NumPy gain/saturation to
