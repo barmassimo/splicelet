@@ -33,13 +33,14 @@ def timeline(model):
                 first,end = max(a,s.first),min(b,s.end)
                 if first<end: result.append({'source':f'source-{i+1}','first':first-s.first,'end':end-s.first})
         return result
-    return {'origin':rational(model.origin),'extent':rational(model.extent),
-            'clips':[{'id':c.uid,'start':rational(c.start),**({'name':c.name} if c.name else {}),
+    def encode(c):
+        return {'id':c.uid,'start':rational(c.start),**({'name':c.name} if c.name else {}),
                       'pieces':ranges(c.pieces),
                       'left_reserve':ranges(c.left_reserve),
                       'right_reserve':ranges(c.right_reserve),
-                      'fades':{key:getattr(c.fades,key) for key in Fades.__dataclass_fields__}}
-                     for c in model.clips]}
+                      'fades':{key:getattr(c.fades,key) for key in Fades.__dataclass_fields__},
+                      **({'components':[encode(child) for child in c.components]} if c.components else {})}
+    return {'origin':rational(model.origin),'extent':rational(model.extent),'clips':[encode(c) for c in model.clips]}
 
 
 def source_info(path):
@@ -50,11 +51,13 @@ def source_info(path):
 def document(model,source,canvas=None):
     path = str(Path(source).resolve())
     sources = getattr(model,'sources',())
+    lanes = (model.video,model.audio) if hasattr(model,'video') else (model,)
+    compound = any(c.components for lane in lanes for c in lane.clips)
     if sources and (len(sources)>1 or not sources[0].has_video):
-        return {'format':'splicelet','version':3,
+        return {'format':'splicelet','version':4 if compound else 3,
                 'sources':[{'id':f'source-{i+1}','path':s.path,**source_info(s.path)} for i,s in enumerate(sources)],
                 'canvas':canvas,'timeline':timeline(model)}
-    return {'format':'splicelet','version':2 if hasattr(model,'video') else 1,
+    return {'format':'splicelet','version':4 if compound else 2 if hasattr(model,'video') else 1,
             'sources':[{'id':'source-1','path':path,**source_info(path)}],
             'timeline':timeline(model)}
 
@@ -63,10 +66,10 @@ def read(path):
     with Path(path).open(encoding='utf-8') as stream:
         data = json.load(stream)
     if not isinstance(data,dict): raise ValueError('Invalid project document.')
-    if data.get('format')!='splicelet' or type(data.get('version')) is not int or data['version'] not in (1,2,3):
+    if data.get('format')!='splicelet' or type(data.get('version')) is not int or data['version'] not in (1,2,3,4):
         raise ValueError('Unsupported Splicelet project format or version.')
     validate_sources(data)
-    if data['version']==3:
+    if data['version']==3 or 'canvas' in data:
         canvas = data.get('canvas')
         if not isinstance(canvas,dict) or any(type(canvas.get(k)) is not int or not 1<=canvas[k]<=32768 for k in ('width','height')):
             raise ValueError('Invalid project canvas.')
@@ -91,7 +94,7 @@ def validate_sources(data):
 
 
 def restore(data,times,duration,sources=()):
-    if data.get('version') in (2,3):
+    if data.get('version') in (2,3,4) and 'video' in data['timeline']:
         from .tracks import Tracks
         state = data['timeline']
         video = restore({'timeline':state['video']},times,duration,sources)
@@ -121,10 +124,10 @@ def restore(data,times,duration,sources=()):
     clips = []
     ids = set()
     cursor = model.origin
-    for item in state['clips']:
+    def decode(item,component=False):
         uid = item['id']
-        if type(uid) is not int or uid<0 or uid in ids: raise ValueError('Invalid clip ID.')
-        ids.add(uid)
+        if type(uid) is not int or uid<0 or (not component and uid in ids): raise ValueError('Invalid clip ID.')
+        if not component: ids.add(uid)
         values = item['fades']
         if set(values)!=set(Fades.__dataclass_fields__) or any(type(v) not in (int,float) or not math.isfinite(v) or v<0 for v in values.values()):
             raise ValueError('Invalid clip fades.')
@@ -133,6 +136,20 @@ def restore(data,times,duration,sources=()):
             raise ValueError('Invalid clip name.')
         clip = Clip(uid,fraction(item['start']),ranges(item['pieces'],True),Fades(**values),
                     ranges(item['left_reserve']),ranges(item['right_reserve']),name)
+        if 'components' in item:
+            items = item['components']
+            if component or not isinstance(items,list) or not items: raise ValueError('Invalid compound clip.')
+            children = tuple(decode(child,True) for child in items)
+            if (children[0].start!=0 or any(b.start<=a.start or b.start>model.end(a)+Fraction(1,1000000) for a,b in zip(children,children[1:]))
+                    or not model.valid_overlaps([Clip(0,model.origin+c.start,c.pieces,c.fades) for c in children])):
+                raise ValueError('Invalid compound clip positions.')
+            expected = model.compound(clip,children)
+            if (clip.pieces,clip.fades,clip.left_reserve,clip.right_reserve)!=(expected.pieces,expected.fades,expected.left_reserve,expected.right_reserve):
+                raise ValueError('Inconsistent compound clip metadata.')
+            clip = Clip(clip.uid,clip.start,clip.pieces,clip.fades,clip.left_reserve,clip.right_reserve,clip.name,children)
+        return clip
+    for item in state['clips']:
+        clip = decode(item)
         if clip.start<model.origin or clip.start<cursor or model.end(clip)>model.extent: raise ValueError('Invalid clip position.')
         clips.append(clip)
         cursor = clip.start

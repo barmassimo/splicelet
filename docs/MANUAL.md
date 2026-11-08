@@ -107,7 +107,7 @@ which includes everything between its outer boundaries.
 | Split | **C** or scissors: split before the displayed frame; it becomes the right clip's first frame. Empty clips are prevented. |
 | Delete | **Delete** removes selected clips and leaves gaps. Other clips stay in place. |
 | Close a gap | Hover the gap and click its trash icon. Later clips in that lane move left and the project shortens where possible. Undo restores it. |
-| Join | **J** joins exactly two selected, adjacent clips, retaining edited source pieces and outer fades. |
+| Join | **J** joins exactly two selected, touching or partially overlapping consecutive clips, retaining source pieces, crossfades and outer fades. |
 | Move | Drag a clip body. Dragging an unselected clip selects and moves it alone. |
 | Trim | Drag a clip edge to hide/reveal source material without changing speed or the opposite edge. |
 | Duplicate | **D** copies the selected clip, or the clip under the playhead without a selection. |
@@ -170,6 +170,18 @@ fades applied first. Linked lanes transition together; unlinked lanes separately
 Both trim edges remain reachable; dragging within the overlap moves the selected
 clip. Nested clips, triple overlaps and splits through a transition are blocked.
 Separate the clips before cutting inside that interval.
+
+Joining overlapping clips creates one compound clip without rendering or
+re-encoding media. It appears as a single clip without internal crossfade
+highlighting; transitions retain their original timing and manual fades.
+Move, duplicate, delete and Undo operate on the whole
+clip. Outer trims edit the first/last constituent within its source reserves;
+they cannot pass an internal crossfade. Splits outside transitions remain
+available. Properties edits the first constituent's fade-in and the last
+constituent's fade-out; existing internal fades are retained. Further joins may
+extend the compound clip. To adjust an internal overlap as separate clips,
+undo the join. Projects containing compound clips use format 4 and
+require an application version supporting that format.
 
 ## Timeline view
 

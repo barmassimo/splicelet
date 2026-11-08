@@ -1,5 +1,6 @@
 """Non-destructive timeline: immutable clips refer to one or more source ranges."""
 from bisect import bisect_right,bisect_left
+from copy import copy
 from dataclasses import dataclass,replace
 from fractions import Fraction
 import math
@@ -26,6 +27,7 @@ class Clip:
     left_reserve: tuple = ()
     right_reserve: tuple = ()
     name: str = ""
+    components: tuple = ()
 
 
 class Clips:
@@ -73,7 +75,38 @@ class Clips:
             edge = max(edge,end) if edge is not None else end
         return total
 
-    def length(self,clip): return sum((self.edges[b]-self.edges[a] for a,b in clip.pieces),Fraction(0))
+    def length(self,clip):
+        if clip.components: return max(self.end(c) for c in clip.components)
+        return sum((self.edges[b]-self.edges[a] for a,b in clip.pieces),Fraction(0))
+
+    def constituents(self,clip):
+        return tuple(replace(c,start=c.start+clip.start) for c in clip.components) if clip.components else (clip,)
+
+    def render_clips(self,clips=None):
+        """Flatten edit groups without changing source ranges or fade clocks."""
+        result = []
+        for clip in self.clips if clips is None else clips:
+            for child in self.constituents(clip):
+                result.append(replace(child,uid=-len(result)-2) if clip.components else child)
+        return result
+
+    def compound(self,template,children):
+        start = children[0].start
+        return replace(template,start=start,
+                       pieces=tuple(p for c in children for p in c.pieces),
+                       components=tuple(replace(c,start=c.start-start) for c in children),
+                       fades=Fades(children[0].fades.audio_in,children[-1].fades.audio_out,
+                                   children[0].fades.video_in,children[-1].fades.video_out),
+                       left_reserve=children[0].left_reserve,right_reserve=children[-1].right_reserve)
+
+    def _component_model(self,clip):
+        model = copy(self)
+        model.clips = [replace(c,uid=i) for i,c in enumerate(self.constituents(clip))]
+        model.next_id = len(model.clips)
+        model.selected_ids = set()
+        model.selection_anchor = None
+        model.undo_stack,model.redo_stack = [],[]
+        return model
     def end(self,clip): return clip.start+self.length(clip)
     @property
     def duration(self): return self.extent-self.origin
@@ -105,7 +138,9 @@ class Clips:
 
     def valid_overlaps(self,clips):
         """Transitions connect two ordered edges; nesting/triple mixes are excluded."""
-        ordered = sorted(clips,key=lambda c:c.start)
+        groups = sorted(clips,key=lambda c:c.start)
+        if any(b.start<=a.start or self.end(b)<=self.end(a) for a,b in zip(groups,groups[1:])): return False
+        ordered = sorted(self.render_clips(clips),key=lambda c:c.start)
         for i,clip in enumerate(ordered):
             if clip.start<self.origin: return False
             if i and (clip.start<=ordered[i-1].start or self.end(clip)<=self.end(ordered[i-1])): return False
@@ -114,13 +149,15 @@ class Clips:
 
     @property
     def has_overlaps(self):
-        return any(b.start<self.end(a) for a,b in zip(self.clips,self.clips[1:]))
+        clips = self.render_clips()
+        return any(b.start<self.end(a) for a,b in zip(clips,clips[1:]))
 
     def effect_spans(self):
+        clips = self.render_clips()
         return tuple(EffectSpan(float(self.project_start(c)),float(self.project_end(c)),c.fades,
-                     float(max(Fraction(0),self.end(self.clips[i-1])-c.start)) if i else 0.,
-                     float(max(Fraction(0),self.end(c)-self.clips[i+1].start)) if i+1<len(self.clips) else 0.,c.uid)
-                     for i,c in enumerate(self.clips))
+                     float(max(Fraction(0),self.end(clips[i-1])-c.start)) if i else 0.,
+                     float(max(Fraction(0),self.end(c)-clips[i+1].start)) if i+1<len(clips) else 0.,c.uid)
+                     for i,c in enumerate(clips))
 
     def move_selection(self,index,target):
         indices = self.moving_indices(index)
@@ -149,6 +186,20 @@ class Clips:
         position = Fraction(str(position))+self.origin
         for index,clip in enumerate(self.clips):
             if not clip.start<position<self.end(clip): continue
+            if clip.components:
+                expanded = self._component_model(clip)
+                boundary = position
+                if expanded.split_at(position-self.origin): boundary = expanded.selected_clip.start
+                left = [c for c in expanded.clips if self.end(c)<=boundary+Fraction(1,1000000)]
+                right = [c for c in expanded.clips if c.start>=boundary-Fraction(1,1000000)]
+                if not left or not right or len(left)+len(right)!=len(expanded.clips): return False
+                first = self.compound(clip,left)
+                second = self.compound(replace(clip,uid=self.next_id),right)
+                if not self.valid_overlaps(self.clips[:index]+[first,second]+self.clips[index+1:]): return False
+                self.remember(); self.next_id += 1
+                self.clips[index:index+1] = [first,second]
+                self.selected_ids = {second.uid}; self.selection_anchor = second.uid
+                return True
             left,right = [],[]
             elapsed = Fraction(0)
             for a,b in clip.pieces:
@@ -176,13 +227,18 @@ class Clips:
     @property
     def can_join(self):
         indices = sorted(self.selected_indices)
-        return len(indices)==2 and indices[1]==indices[0]+1 and abs(self.end(self.clips[indices[0]])-self.clips[indices[1]].start)<=Fraction(1,1000000)
+        return len(indices)==2 and indices[1]==indices[0]+1 and self.clips[indices[1]].start<=self.end(self.clips[indices[0]])+Fraction(1,1000000)
 
     def join(self):
         if not self.can_join: return False
         self.remember()
         a,b = sorted(self.selected_indices)
         left,right = self.clips[a],self.clips[b]
+        if left.components or right.components or right.start<self.end(left):
+            merged = self.compound(left,self.constituents(left)+self.constituents(right))
+            self.clips[a:b+1] = [merged]
+            self.selected_ids = {merged.uid}; self.selection_anchor = merged.uid
+            return True
         pieces = []
         for first,last in left.pieces+right.pieces:
             if pieces and pieces[-1][1]==first: pieces[-1] = (pieces[-1][0],last)
@@ -327,6 +383,14 @@ class Clips:
     def resize_candidate(self,index,side,position):
         if not 0<=index<len(self.clips) or side not in ('left','right'): return None
         clip = self.clips[index]
+        if clip.components:
+            expanded = self._component_model(clip)
+            edge = 0 if side=='left' else len(expanded.clips)-1
+            candidate = expanded.resize_candidate(edge,side,position)
+            if candidate is None: return None
+            expanded.clips[edge] = candidate
+            merged = self.compound(clip,expanded.clips)
+            return merged if self.valid_overlaps(self.clips[:index]+[merged]+self.clips[index+1:]) else clip
         position = Fraction(str(position))+self.origin
         start,end = clip.start,self.end(clip)
         first_a,first_b = clip.pieces[0]
@@ -389,12 +453,22 @@ class Clips:
         clip = self.selected_clip
         if getattr(clip.fades,key)==value: return False
         self.remember()
-        self.clips[self.selected] = replace(clip,fades=replace(clip.fades,**{key:value}))
+        if clip.components:
+            children = list(self.constituents(clip))
+            edge = 0 if key.endswith('_in') else -1
+            children[edge] = replace(children[edge],fades=replace(children[edge].fades,**{key:value}))
+            self.clips[self.selected] = self.compound(clip,children)
+        else:
+            self.clips[self.selected] = replace(clip,fades=replace(clip.fades,**{key:value}))
         return True
 
     def parts(self,clip=None):
         result = []
-        for item in ([clip] if clip is not None else self.clips):
+        all_clips = self.render_clips()
+        if clip is not None:
+            offset = sum(len(self.constituents(c)) for c in self.clips[:self.clips.index(clip)])
+            all_clips = all_clips[offset:offset+len(self.constituents(clip))]
+        for item in all_clips:
             cursor = self.project_start(item)
             for a,b in item.pieces:
                 boundaries = [a,*[s.end for s in self.sources if a<s.end<b],b]

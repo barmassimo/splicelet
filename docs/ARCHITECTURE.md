@@ -57,6 +57,16 @@ preview engine. Live imports use PyAV, rather than an FFprobe subprocess.
   Re-extending a joined clip must not restore deliberately deleted source ranges.
   Video-derived edits use actual video edges; audio-only edits use decoded
   audio-block/sample-anchor boundaries, not individual samples.
+- Joining overlaps creates a `Clip.components` group of flat constituent clips
+  with relative starts. Group duration is their outer extent, rather than the
+  sum of source lengths. Rendering flattens these groups into the original
+  project contributions, with distinct render IDs for duplicated constituents.
+  Shared composition and encoding are unchanged; internal manual fades and
+  crossfade clocks survive joining. Outer trims delegate to the edge constituent,
+  retaining its reserves and blocking nesting across internal transitions.
+  Splits outside transitions partition the group; fade properties edit the
+  outer constituent envelopes. QML presents the group as one clip without
+  highlighting its internal transitions.
 - `Tracks` owns a `Clips` per lane. Linked changes copy the edited lane to its
   partner atomically; unlinked edits remain local. Frame schedules include black
   gaps. QML/worker float seconds and FFmpeg AVTB boundaries mean the complete
@@ -186,7 +196,9 @@ screen hides the title bar.
 
 `.splicelet` JSON versions are independent of application versions. Version 2
 stores single-video two-lane projects; version 3 adds multi-source/audio-only and
-the canvas. Versions 1–3 load; version 1 opens linked and upgrades on save.
+the canvas. Version 4 stores compound constituents and is written only when a
+project contains them; canvas metadata remains present for multi-source/audio-only
+projects. Versions 1–4 load; version 1 opens linked and upgrades on save.
 Source IDs reference local piece/reserve indexes, translated into the virtual grid
 on load. Times serialize as numerator/denominator pairs. Source identity checks
 absolute path, size and `mtime_ns`, not full hashes. Loading stages/indexes sources

@@ -12,6 +12,15 @@ independent of each other and of the public Git history.
   its increment is committed or tagged; select the increment from the combined
   scope of the pending changes.
 
+## 1.6.0 — Unreleased
+
+### Added
+
+- Join touching or overlapping consecutive clips into one compound clip while
+  retaining internal crossfades, manual fades, source timing and trim reserves,
+  without intermediate rendering or re-encoding. Preserve compounds in project
+  format 4, displayed as a single clip with atomic Undo/Redo.
+
 ## 1.5.1 — Unreleased
 
 ### Fixed

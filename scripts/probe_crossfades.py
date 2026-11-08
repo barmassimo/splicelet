@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import av
 import numpy as np
-from PySide6.QtCore import QUrl,Qt,QPointF,QPoint,QCoreApplication,QEvent,QLocale
+from PySide6.QtCore import QUrl,Qt,QPointF,QPoint,QCoreApplication,QEvent,QLocale,QSettings
 from PySide6.QtGui import QGuiApplication,QMouseEvent,QFontDatabase
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
@@ -210,6 +210,89 @@ with av.open(str(run/'manual-fades.mp4')) as container:
         assert np.abs(frame.to_ndarray(format='rgb24').astype(float)-rgb(image)).mean()<5
 passed('manual_fades_remain_independent_and_preview_export_agree')
 
+# Joining is a metadata operation: compare actual decoded preview and exports,
+# including a manual fade on an internal edge that must survive the grouping.
+model.select(0); model.select(1,True)
+unjoined = model.snapshot()
+assert model.can_join and model.join()
+assert len(model.clips)==1 and model.duration==3 and model.video.has_overlaps
+assert model.video.clips==model.audio.clips and len(model.clips[0].components)==2
+assert np.array_equal(read('audio',job('audio')),faded)
+assert np.array_equal(read('audio',job('audio',1.25,2.5)),faded[60000:120000])
+group_frames = read('video',job())
+assert [f[1] for f in group_frames]==[f[1] for f in preview_frames]
+assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(group_frames,preview_frames))
+for start,end in ((0.,3.),(1.25,1.75),(2.25,2.75)):
+    after_path = run/f'compound-{start}.mp4'
+    status,message = task._execute(spec(start,end),after_path); assert status=='success',message
+    compound_spec = spec(start,end)
+    model.undo(); assert model.snapshot()==unjoined
+    before_path = run/f'compound-reference-{start}.mp4'
+    status,message = task._execute(spec(start,end),before_path); assert status=='success',message
+    model.redo()
+    def decoded(path,kind):
+        with av.open(str(path)) as container:
+            return [(frame.pts,frame.time_base,frame.to_ndarray(format='rgb24') if kind=='video' else frame.to_ndarray())
+                    for frame in container.decode(**{kind:0})]
+    for kind in ('video','audio'):
+        a,b = decoded(before_path,kind),decoded(after_path,kind)
+        assert len(a)==len(b)
+        assert all(x[:2]==y[:2] and np.array_equal(x[2],y[2]) for x,y in zip(a,b))
+    pcm_path = run/f'compound-{start}.f32le'; task._audio(compound_spec,pcm_path)
+    assert np.array_equal(np.fromfile(pcm_path,dtype='<f4').reshape(-1,2),faded[round(start*48000):round(end*48000)])
+passed('overlap_join_preserves_exact_preview_pcm_pixels_pts_and_full_partial_encoded_exports')
+
+joined_state = model.snapshot()
+document = project.document(model,source)
+assert document['version']==4
+project_path = run/'compound.splicelet'; project.write(project_path,document)
+restored = project.restore(project.read(project_path),times,4)
+assert project.timeline(restored)==project.timeline(model)
+assert not model.split_at(1.5) and model.snapshot()==joined_state
+assert model.move_selection(0,1) and model.clips[0].start==1 and model.duration==4
+model.undo(); assert model.snapshot()==joined_state
+assert model.duplicate(0) and model.duration==6
+assert model.clips[1].components==model.clips[0].components
+assert len({p.clip_id for p in model.video.parts()})==4
+model.undo()
+assert model.resize(0,'left',.25) and abs(float(model.clips[0].start)-.25)<.02
+assert model.clips[0].start==model.times[model.clips[0].pieces[0][0]]
+assert model.resize(0,'right',2.75)
+assert model.set_fade('audio_out',.25)
+assert model.video.effect_spans()[-1].fades.audio_out==.25
+model.undo(); model.undo(); model.undo(); assert model.snapshot()==joined_state
+assert model.split_at(.5) and len(model.clips)==2
+assert model.clips[1].components[-1].fades.audio_in==.5
+model.undo(); assert model.snapshot()==joined_state
+assert model.unlink(); video_before = model.video.clips.copy()
+model.activate('audio'); assert model.move_selection(0,.5)
+assert model.video.clips==video_before and model.audio.clips!=video_before
+model.undo(); model.undo(); assert model.snapshot()==joined_state
+model.undo(); assert model.snapshot()==unjoined
+passed('compound_roundtrip_move_duplicate_trim_split_fades_unlinked_lanes_and_atomic_history')
+
+for key,value in (('start',[-1,1]),('pieces',[]),('components',[])):
+    invalid = json.loads(json.dumps(document))
+    invalid['timeline']['video']['clips'][0]['components'][0][key] = value
+    try: project.restore(invalid,times,4)
+    except ValueError: pass
+    else: raise AssertionError(f'Invalid compound {key} accepted')
+chain = Clips(len(times),times,4)
+chain.clips = [Clip(0,Fraction(0),((0,60),)),Clip(1,Fraction(1),((60,120),)),Clip(2,Fraction(5,2),((0,60),))]
+chain.extent = Fraction(9,2); chain.next_id = 3
+chain_job = replace(job('audio'),duration=4.5,parts=chain.parts(),effects=chain.effect_spans())
+chain_pcm = read('audio',chain_job)
+chain.select(0); chain.select(1,True); assert chain.join()
+assert not chain.move(1,1.5)  # Still reject a triple overlap hidden inside a group.
+chain.select(0); chain.select(1,True); assert chain.join()
+assert len(chain.clips)==1 and len(chain.clips[0].components)==3 and chain.duration==Fraction(9,2)
+assert np.array_equal(read('audio',replace(chain_job,parts=chain.parts(),effects=chain.effect_spans())),chain_pcm)
+chain.select(0); assert chain.duplicate()
+chain.select(0); chain.select(1,True); assert chain.join()
+assert len(chain.clips[0].components)==6 and chain.duration==9
+assert project.timeline(project.restore(project.document(chain,source),times,4))==project.timeline(chain)
+passed('compound_validation_repeated_joins_unique_contributions_and_hidden_triple_rejection')
+
 # Uneven source PTS, a nonzero container origin, and an overlap edge between frames.
 vfr = run/'offset-vfr.nut'
 with av.open(str(vfr),'w',format='nut') as output:
@@ -250,6 +333,11 @@ for frame,(_,stamp,image) in zip(exported,mixed_frames):
     assert abs(float(frame.pts*frame.time_base)-stamp)<.001
     assert np.abs(frame.to_ndarray(format='rgb24').astype(float)-rgb(image)).mean()<5
 passed('uneven_pts_nonzero_source_origin_and_frame_hold_at_overlap_end')
+vm.select(0); vm.select(1,True); assert vm.join()
+vjoined = read('video',replace(vjob,parts=vm.parts(),effects=vm.effect_spans()))
+assert [f[1] for f in vjoined]==[f[1] for f in mixed_frames]
+assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(vjoined,mixed_frames))
+passed('compound_join_preserves_vfr_pts_and_off_grid_transition_frame_holds')
 
 for kind in ('audio','video'):
     worker = Decoder(kind)
@@ -300,6 +388,8 @@ status,message = cancelled._execute(spec(),destination)
 assert status=='cancelled' and not destination.exists() and not list(run.glob('.video-export-*'))
 passed('overlap_export_cancellation_removes_lossless_transition_and_pcm_temporaries')
 
+QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+QSettings.setPath(QSettings.Format.IniFormat,QSettings.Scope.UserScope,str(run/'settings'))
 provider = FrameProvider(); preview = Preview(provider,muted=True)
 engine = QQmlApplicationEngine(); engine.addImageProvider('frames',provider)
 engine.setInitialProperties({'preview':preview}); engine.load(QUrl.fromLocalFile(str(ROOT/'splicelet/Main.qml')))
@@ -418,6 +508,28 @@ try:
     assert preview._clips.video.clips==video and not preview._clips.audio.has_overlaps
     assert visual_item('overlap-1000000-1000001') is None and visual_item('overlap-0-1') is not None
     passed('actual_qml_overlap_drag_snap_alt_baked_fade_refresh_undo_and_unlinked_lane')
+    audio_before = preview._clips.audio.clips.copy()
+    preview.selectClip(0); preview.selectClip(1,True)
+    assert preview.canJoin
+    QTest.keyClick(window,Qt.Key.Key_J); wait(lambda:not preview.busy)
+    assert len(preview._clips.video.clips)==1 and preview._clips.audio.clips==audio_before
+    assert visual_item('clip-1') is None
+    assert visual_item('internal-overlap-0-1') is None
+    assert visual_item('overlap-0-1') is None
+    preview.seek(1.5); wait(lambda:not preview.busy); QTest.qWait(100)
+    assert preview.videoGain==1.
+    window.grabWindow().save(str(run/'compound-join.png'))
+    preview.undoCut(); wait(lambda:not preview.busy)
+    assert len(preview._clips.video.clips)==2 and preview.canJoin
+    preview.redoCut(); wait(lambda:not preview.busy)
+    assert len(preview._clips.video.clips)==1 and visual_item('overlap-0-1') is None
+    single_compound = run/'single-compound.splicelet'
+    assert preview.saveProjectAs(QUrl.fromLocalFile(str(single_compound)))
+    saved_timeline = project.timeline(preview._clips)
+    preview.openProject(QUrl.fromLocalFile(str(single_compound)))
+    wait(lambda:preview.indexedReady and not preview.busy)
+    assert not preview.projectDirty and project.timeline(preview._clips)==saved_timeline
+    passed('qml_j_shortcut_joins_overlap_as_one_clip_without_internal_tint_and_preserves_unlinked_audio_and_history')
 finally:
     preview.close(); window.close(); engine.deleteLater(); app.processEvents()
 assert hashlib.sha256(source.read_bytes()).hexdigest()==digest

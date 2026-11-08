@@ -161,7 +161,8 @@ try:
     assert len(set(preview.recentProjects))==10
     assert preview.saveProject()
     assert len(preview.recentProjects)==10
-    assert QSettings('Splicelet','Splicelet').value('recentProjects',[],type=list)==preview.recentProjects
+    stored = QSettings(QSettings.defaultFormat(),QSettings.Scope.UserScope,'Splicelet','Splicelet')
+    assert stored.value('recentProjects',[],type=list)==preview.recentProjects
     passed('recent_projects_persist_order_deduplicate_and_limit_ten')
     menu = window.findChild(QObject,'fileMenu')
     QMetaObject.invokeMethod(menu,'open')

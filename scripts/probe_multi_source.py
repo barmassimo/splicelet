@@ -185,8 +185,25 @@ try:
     image = pixels(mixed_frames[0][2])
     assert 110<image[90,160,0]<145 and 110<image[90,160,2]<145
     export(replace(mixed,timeline_start=1.5,timeline_end=1.8),'transition.mp4')
+    model.select(0); model.select(1,True); assert model.join()
+    preview._editing_changed(); idle()
+    compound = preview.export_spec(False)
+    assert np.array_equal(read('audio',compound,1,2),mixed_pcm)
+    compound_frames = read('video',compound,1.5,1.6)
+    assert [f[1] for f in compound_frames]==[f[1] for f in mixed_frames]
+    assert all(np.array_equal(pixels(a[2]),pixels(b[2])) for a,b in zip(compound_frames,mixed_frames))
+    compound_path = run/'multi-compound.splicelet'
+    assert preview.saveProjectAs(QUrl.fromLocalFile(str(compound_path)))
+    assert project.read(compound_path)['version']==4
+    compound_timeline = project.timeline(model)
+    preview.openProject(QUrl.fromLocalFile(str(compound_path))); idle()
+    assert not errors and project.timeline(preview._clips)==compound_timeline,errors
+    assert np.array_equal(read('audio',preview.export_spec(False),1,2),mixed_pcm)
+    # Return to the non-compound layout for the independent legacy-format checks.
+    preview._clips = model
+    model.undo()
     model.undo(); preview._editing_changed(); idle()
-    passed('cross_source_dissolve_with_mixed_pts_resolutions_pcm_and_partial_export')
+    passed('cross_source_dissolve_compound_join_version4_roundtrip_and_partial_export')
 
     path = run/'multi.splicelet'
     assert preview.saveProjectAs(QUrl.fromLocalFile(str(path)))

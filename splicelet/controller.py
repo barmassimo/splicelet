@@ -248,7 +248,7 @@ class Preview(QObject):
         except (OSError,ValueError,KeyError,TypeError) as exc:
             self.projectError.emit(f'Cannot open project:\n{path}\n\n{exc}')
             return
-        if data['version']==3:
+        if data['version']==3 or 'canvas' in data:
             self._load_multi_project(path,data)
             return
         self.open_path(data['sources'][0]['path'])
@@ -591,10 +591,10 @@ class Preview(QObject):
     @Slot()
     def joinSelected(self):
         if self._clips and self._clips.join():
-            self._status = 'Clips joined. Fades on the outer edges were preserved.'
+            self._status = 'Clips joined. Existing crossfades and outer fades were preserved.'
             self._editing_changed()
         else:
-            self._status = 'Select exactly two adjacent clips to join them.'
+            self._status = 'Select exactly two touching or overlapping consecutive clips to join them.'
             self.changed.emit()
 
     @Slot(float,float,result=float)

@@ -129,6 +129,8 @@ review; QML changes require visual inspection, and audio changes require listeni
 Numerical PCM tests and muted/offscreen UI checks do not establish perceived sync,
 device latency or listening quality. Report the checks actually run; do not
 append routine pass counts or screenshots to permanent design documentation.
+Crossfade, multi-source and project probes use isolated INI settings under their
+artifact directories for UI persistence checks.
 
 For direct Python probes, configure the project DLL paths in the current session:
 
@@ -149,7 +151,7 @@ integration fixture. Report paths are relative to `artifacts/`.
 | `probe_timeline_edits.py` | Gaps, mapping, joins, reserves, duplication and history | `timeline-tests/report.json` |
 | `probe_clip_effects.py` | PCM/video fades, seeks, joins and preservation | `effects-tests/report.json` |
 | `probe_audio_tracks.py` | Independent lanes, mapping, gestures and persistence | `audio-track-tests/report.json` |
-| `probe_crossfades.py` | Mixed PCM/video, PTS schedules, preview clock-jump recovery and VFR frame holds, exact paused/offline frames, export window phase, overlap interaction and cancellation | `crossfade-tests/report.json` |
+| `probe_crossfades.py` | Mixed PCM/video, PTS schedules, preview recovery and VFR holds, compound joins (exact before/after decoded preview and full/partial exports), persistence/history, overlap interaction and cancellation | `crossfade-tests/report.json` |
 | `probe_multi_source.py` | Mixed sources/canvases/cadences, PCM, projects, library gestures and safety | `multi-source-tests/report.json` |
 | `probe_timeline_visuals.py` | Peaks, thumbnails, retained ranges, caches and QML zoom/pan | `timeline-visual-tests/report.json` |
 | `probe_export_options.py` | Export scope/defaults, normalization, AAC references and cancellation | `export-option-tests/report.json` |
