@@ -7,12 +7,15 @@ import QtQuick.Dialogs
 ApplicationWindow {
     id: root
     required property var preview
+    property url applicationIconSource: Qt.resolvedUrl("assets/splicelet.svg")
     readonly property alias uiTheme: themeColors
     readonly property var theme: themeColors
     Theme { id: themeColors; dark: preview.darkTheme }
     width: 1120; height: 790
     minimumWidth: 760; minimumHeight: 560
     visible: true
+    flags: Qt.Window | Qt.CustomizeWindowHint | Qt.WindowSystemMenuHint | Qt.WindowMinimizeButtonHint | Qt.WindowMaximizeButtonHint | Qt.WindowCloseButtonHint | Qt.ExpandedClientAreaHint | Qt.NoTitleBarBackgroundHint
+    topPadding: 0
     title: "Splicelet — " + preview.projectName + (preview.projectDirty ? " *" : "")
     readonly property bool fullScreen: visibility === Window.FullScreen
     readonly property bool transportKeysEnabled: !preview.openingProject && !appMenu.opened && !timeInput.activeFocus && !properties.editing && !picker.visible && !exportOptions.visible && !exportPicker.visible && !projectPicker.visible && !savePicker.visible && !unsavedDialog.visible && !projectErrorDialog.visible && !aboutDialog.visible && !shortcutsDialog.visible && !spaceDialog.visible && !fileMenu.opened && !editMenu.opened && !recentMenu.opened && !viewMenu.opened && !helpMenu.opened && timeline.dragIndex<0 && timeline.resizeIndex<0
@@ -23,7 +26,7 @@ ApplicationWindow {
     component PanelTab: Button {
         id: panelTab
         required property int pageIndex
-        readonly property bool selected: !appMenu.opened && sourceTabs.currentIndex===pageIndex
+        readonly property bool selected: sourceTabs.currentIndex===pageIndex
         implicitWidth: 106
         implicitHeight: 36
         padding: 8
@@ -137,6 +140,7 @@ ApplicationWindow {
     }
     component ShortcutMenuItem: MenuItem {
         id: menuItem
+        objectName: action && action.objectName ? "menuCommand_" + action.objectName : ""
         leftPadding: padding
         indicator: null
         onTriggered: if (!subMenu) appMenu.close()
@@ -163,38 +167,123 @@ ApplicationWindow {
             }
         }
     }
+    Rectangle {
+        id: titleBar
+        objectName: "windowTitleBar"
+        width: parent.width
+        z: 40
+        visible: !root.fullScreen
+        height: visible ? Math.max(36, root.SafeArea.margins.top) : 0
+        color: theme.window
+        // Leave Windows caption buttons in their native area on the right.
+        MouseArea {
+            objectName: "titleBarDragArea"
+            property point pressPosition
+            property bool moving: false
+            anchors.fill: parent
+            anchors.leftMargin: appMenu.opened ? appMenu.x + appMenu.width : 76
+            anchors.rightMargin: Math.max(150, root.SafeArea.margins.right)
+            onPressed: function(mouse) { pressPosition=Qt.point(mouse.x,mouse.y); moving=false }
+            onPositionChanged: function(mouse) {
+                if (pressed && !moving && Math.hypot(mouse.x-pressPosition.x,mouse.y-pressPosition.y)>=Qt.styleHints.startDragDistance) {
+                    moving=true
+                    root.startSystemMove()
+                }
+            }
+            onDoubleClicked: root.visibility===Window.Maximized ? root.showNormal() : root.showMaximized()
+        }
+        Label {
+            objectName: "windowTitleLabel"
+            anchors.left: parent.left; anchors.leftMargin: 84
+            anchors.right: parent.right; anchors.rightMargin: Math.max(158, root.SafeArea.margins.right+8)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: !appMenu.opened
+            text: root.title
+            elide: Text.ElideRight
+            color: theme.muted
+            font.pixelSize: 12
+        }
+        Image {
+            objectName: "systemMenuIcon"
+            x: 12; anchors.verticalCenter: parent.verticalCenter
+            width: 16; height: 16
+            source: root.applicationIconSource
+            fillMode: Image.PreserveAspectFit
+            Accessible.role: Accessible.Button
+            Accessible.name: "Window menu"
+        }
+        SpliceletButton {
+            id: menuButton
+            objectName: "menuButton"
+            x: 36; anchors.verticalCenter: parent.verticalCenter
+            width: 36; height: 30; implicitWidth: 36; implicitHeight: 30
+            visible: !root.fullScreen
+            padding: 0
+            focusPolicy: Qt.StrongFocus
+            onClicked: { properties.finishEditing(); appMenu.opened ? appMenu.close() : appMenu.open() }
+            Accessible.name: "Application menu"
+            background: Rectangle {
+                radius: 8
+                color: appMenu.opened ? theme.surface : menuButton.down ? theme.pressed : menuButton.hovered ? theme.hover : "transparent"
+            }
+            contentItem: Item {
+                Column {
+                    anchors.centerIn: parent
+                    spacing: 4
+                    Repeater { model: 3; Rectangle { width: 16; height: 1.5; radius: .75; color: theme.text } }
+                }
+            }
+        }
+    }
     Item {
         id: appMenu
         objectName: "applicationMenu"
-        anchors.fill: parent
+        parent: titleBar
+        x: 76; y: 0
+        width: compactMenu.implicitWidth; height: titleBar.height
         z: 50
         property bool opened: false
-        function open() { properties.finishEditing(); panelMenu.reset(); opened = true; panelMenu.forceActiveFocus() }
-        function close() { opened = false; timeInput.focus = false }
+        function reset() {
+            recentMenu.close(); fileMenu.close(); editMenu.close(); viewMenu.close(); helpMenu.close()
+            compactMenu.currentIndex = -1
+            for (let i=0; i<compactMenu.count; ++i) {
+                const item=compactMenu.itemAt(i)
+                if (item) { item.highlighted=false; item.focus=false }
+            }
+        }
+        function open() { properties.finishEditing(); reset(); opened = true; compactMenu.forceActiveFocus() }
+        function close() { reset(); opened = false; timeInput.focus = false }
         MenuBar {
             id: compactMenu
             objectName: "compactMenuBar"
-            // Keep shared actions registered with Qt's shortcut routing.
-            x: -10000; y: -10000
-            height: 36
-            padding: 2
+            // Keep the bar instantiated so shared shortcuts stay registered.
+            visible: appMenu.opened
+            height: titleBar.height
+            delegate: MenuBarItem { objectName: "menuCategory" + text; height: titleBar.height }
+            topPadding: 0; bottomPadding: 0; leftPadding: 0; rightPadding: 0
             background: Item {}
             Menu {
                 id: fileMenu
                 objectName: "fileMenu"
+                width: 320
                 title: "File"
                 delegate: ShortcutMenuItem {}
                 Action { text: "Open project..."; shortcut: "Ctrl+O"; enabled: !preview.exporting && !preview.busy && root.fileDialogsClosed; onTriggered: root.requestAction(function() { projectPicker.open() }) }
                 Menu {
                     id: recentMenu
                     objectName: "recentMenu"
+                    width: Math.min(420, root.width-fileMenu.width-56)
                     title: "Open recent project"
                     enabled: !preview.exporting && !preview.busy && root.fileDialogsClosed && preview.recentProjects.length>0
                     Instantiator {
                         model: preview.recentProjects
                         delegate: MenuItem {
                             required property string modelData
-                            text: modelData
+                            required property int index
+                            objectName: "recentProject" + index
+                            text: modelData.replace(/\\/g,"/").split("/").pop()
+                            ToolTip.text: modelData
+                            ToolTip.visible: hovered
                             onTriggered: { appMenu.close(); const path = modelData; root.requestAction(function() { preview.openRecentProject(path) }) }
                         }
                         onObjectAdded: function(index,object) { recentMenu.insertItem(index,object) }
@@ -215,6 +304,7 @@ ApplicationWindow {
             Menu {
                 id: editMenu
                 objectName: "editMenu"
+                width: 320
                 title: "Edit"
                 delegate: ShortcutMenuItem {}
                 Action { objectName: "undoAction"; text: "Undo"; shortcut: "Ctrl+Z"; enabled: preview.canUndo && (root.transportKeysEnabled || editMenu.opened || appMenu.opened); onTriggered: { properties.finishEditing(); preview.undoCut() } }
@@ -227,6 +317,7 @@ ApplicationWindow {
             Menu {
                 id: viewMenu
                 objectName: "viewMenu"
+                width: 320
                 title: "View"
                 delegate: ShortcutMenuItem {}
                 Action { objectName: "darkThemeAction"; text: "Night theme"; checkable: true; checked: preview.darkTheme; onTriggered: preview.setDarkTheme(checked) }
@@ -240,6 +331,7 @@ ApplicationWindow {
             Menu {
                 id: helpMenu
                 objectName: "helpMenu"
+                width: 320
                 title: "Help"
                 delegate: ShortcutMenuItem {}
                 Action { objectName: "shortcutsAction"; text: "Shortcuts..."; enabled: root.fileDialogsClosed; onTriggered: { properties.finishEditing(); shortcutsDialog.open() } }
@@ -571,6 +663,7 @@ ApplicationWindow {
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: root.fullScreen ? 0 : 12
+        anchors.topMargin: root.fullScreen ? 0 : titleBar.height + 12
         spacing: root.fullScreen ? 0 : 8
         RowLayout {
             Layout.fillWidth: true; Layout.fillHeight: true
@@ -593,34 +686,12 @@ ApplicationWindow {
                     Layout.fillWidth: true
                     spacing: 4
                     onCurrentIndexChanged: { properties.finishEditing(); appMenu.close() }
-                    SpliceletButton {
-                        id: menuButton
-                        objectName: "menuButton"
-                        Layout.preferredWidth: 36; implicitWidth: 36; implicitHeight: 36
-                        visible: !root.fullScreen
-                        padding: 0
-                        focusPolicy: Qt.StrongFocus
-                        onClicked: { properties.finishEditing(); appMenu.opened ? appMenu.close() : appMenu.open() }
-                        Accessible.name: "Application menu"
-                        ToolTip.text: "File, Edit, View and Help · Ctrl+M"; ToolTip.visible: hovered
-                        background: Rectangle {
-                            radius: 8
-                            color: appMenu.opened ? theme.surface : menuButton.down ? theme.pressed : menuButton.hovered ? theme.hover : "transparent"
-                        }
-                        contentItem: Item {
-                            Column {
-                                anchors.centerIn: parent
-                                spacing: 4
-                                Repeater { model: 3; Rectangle { width: 16; height: 1.5; radius: .75; color: theme.text } }
-                            }
-                        }
-                    }
                     PanelTab { Layout.fillWidth: true; pageIndex: 0; text: "Properties"; objectName: "propertiesTab" }
                     PanelTab { Layout.fillWidth: true; pageIndex: 1; objectName: "sourceTab"; text: "Sources" }
                 }
                 StackLayout {
                     Layout.fillWidth: true; Layout.fillHeight: true
-                    currentIndex: appMenu.opened ? 2 : sourceTabs.currentIndex
+                    currentIndex: sourceTabs.currentIndex
                     Rectangle {
                         color: theme.surface; radius: 12
                         ClipProperties {
@@ -715,12 +786,6 @@ ApplicationWindow {
                                 }
                             }
                         }
-                    }
-                    PanelMenu {
-                        id: panelMenu
-                        objectName: "panelApplicationMenu"
-                        menus: [fileMenu,editMenu,viewMenu,helpMenu]
-                        onDismissed: appMenu.close()
                     }
                 }
             }

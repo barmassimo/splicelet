@@ -17,7 +17,8 @@ Paths in this table are relative to `splicelet/` unless stated otherwise.
 | Component | Responsibility |
 |---|---|
 | `__main__.py` | Qt/QML startup, locale, image provider, keyboard filter and shutdown |
-| `Main.qml`, `PanelMenu.qml`, `Theme.qml` | Workspace, inline menus, shared actions, dialogs, transport and persisted appearance |
+| `window_frame.py` | Windows native title-bar hit testing for caption gestures and menu input |
+| `Main.qml`, `Theme.qml` | Workspace, title-bar menus, shared actions, dialogs, transport and persisted appearance |
 | `Timeline.qml` | Ruler, selection, drag/trim, snapping, gaps, zoom/pan and timeline visuals |
 | `ClipProperties.qml`, `FadeControl.qml`, `SpliceletButton.qml` | Properties and reusable controls |
 | `controller.py` | `Preview` QObject coordinates models, workers, audio sink, frame cache and export; `FrameProvider` supplies QImages |
@@ -165,6 +166,21 @@ Final Windows publication must not overwrite a file created during rendering.
 Cancellation is cooperative with terminate/kill fallback; recursive cleanup first
 validates the resolved temporary path. Temporary disk use grows with audio duration
 and transition frames. Preserve this lifecycle when changing export behavior.
+
+The QML title bar uses Qt expanded client areas with native Windows caption
+controls and resize borders. Shared actions stay in a horizontal MenuBar, revealed
+by the hamburger or Ctrl+M, with standard cascading submenus. The workspace
+reserves the title-bar height; opening menus never replaces side-panel content
+or adds a layout row. MenuBar safe-area padding is explicitly zero inside this
+reserved title area. `WindowFrame`, installed at Windows startup, routes native
+hit tests around Qt's expanded-area helper: interactive menu regions receive
+real client input; the application icon returns the native system-menu hit target
+(single-click menu, double-click close); the remaining caption uses native
+move/double-click gestures.
+Caption buttons and resize borders retain Qt/Windows handling. Direct QML events
+retain a drag-threshold/double-click fallback for offscreen probes. Opening and
+closing the application menu clears the active category and highlight. Full
+screen hides the title bar.
 
 ## Persistence and runtime
 

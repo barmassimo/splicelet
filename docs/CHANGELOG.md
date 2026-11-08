@@ -4,6 +4,40 @@ The first public source snapshot is version 1.2.1. Earlier local development is
 summarized below; application versions and project file format versions are
 independent of each other and of the public Git history.
 
+## 1.5.0 — Unreleased
+
+### Added
+
+- Application icon beside the hamburger opens the native Windows system menu
+  and supports double-click close with the existing unsaved-project protection.
+
+## 1.4.2 — Unreleased
+
+### Fixed
+
+- Route Windows title-bar hit tests to native caption gestures and real QML menu
+  input, restoring physical double-click maximize/restore and category clicks.
+- Clear the active menu category and its highlight whenever the application menu
+  closes or opens.
+
+## 1.4.1 — Unreleased
+
+### Fixed
+
+- Restored title-bar double-click maximize/restore by starting window movement
+  only after a drag begins.
+- Aligned menu categories beside the hamburger on Windows by overriding inherited
+  safe-area padding, and removed the hamburger tooltip that obscured the menu.
+
+## 1.4.0 — Unreleased
+
+### Changed
+
+- Integrated the application menu into the window title bar: horizontal
+  File/Edit/View/Help categories and cascading submenus replace the vertical
+  side-panel accordion, preserving the workspace while navigating commands.
+  The window title hides while the menu is open.
+
 ## 1.3.1 — Unreleased
 
 ### Fixed

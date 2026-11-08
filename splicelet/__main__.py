@@ -44,11 +44,15 @@ provider = FrameProvider()
 preview = Preview(provider,muted=args.muted or args.smoke_test)
 engine = QQmlApplicationEngine()
 engine.addImageProvider('frames',provider)
-engine.setInitialProperties({'preview':preview})
+engine.setInitialProperties({'preview':preview,'applicationIconSource':QUrl.fromLocalFile(str(icon))})
 engine.load(QUrl.fromLocalFile(str(Path(__file__).with_name('Main.qml'))))
 if not engine.rootObjects():
     preview.close()
     sys.exit(1)
+if sys.platform == 'win32' and app.platformName() == 'windows':
+    from .window_frame import WindowFrame
+    window_frame = WindowFrame(engine.rootObjects()[0])
+    app.installNativeEventFilter(window_frame)
 frame_keys = FrameKeys(engine.rootObjects()[0],preview)
 app.installEventFilter(frame_keys)
 app.aboutToQuit.connect(preview.close)

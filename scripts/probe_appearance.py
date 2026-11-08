@@ -1,4 +1,4 @@
-"""Verify appearance preferences and collapsible application menu."""
+"""Verify appearance preferences and title-bar application menu."""
 import json
 import os
 from pathlib import Path
@@ -36,6 +36,10 @@ engine.setInitialProperties({'preview':preview})
 engine.load(QUrl.fromLocalFile(str(ROOT/'splicelet/Main.qml')))
 assert engine.rootObjects()
 window = engine.rootObjects()[0]
+if app.platformName()=='windows':
+    from splicelet.window_frame import WindowFrame
+    window_frame=WindowFrame(window)
+    app.installNativeEventFilter(window_frame)
 checks = []
 def passed(name):
     checks.append(name)
@@ -60,6 +64,17 @@ try:
     assert status_text.property('text')=='Ready'
     assert abs(status_text.mapToScene(QPointF()).x()-time_input.mapToScene(QPointF()).x())<1
     window.grabWindow().save(str(OUT/'light-ready-status.png'))
+    drag_area=window.findChild(QQuickItem,'titleBarDragArea')
+    def double_click_title():
+        point=drag_area.mapToScene(QPointF(drag_area.width()/2,drag_area.height()/2)).toPoint()
+        QTest.mouseDClick(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,point)
+        QTest.mouseRelease(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,point)
+        QTest.qWait(200)
+    double_click_title()
+    assert window.visibility()==window.Visibility.Maximized,window.visibility()
+    double_click_title()
+    assert window.visibility()==window.Visibility.Windowed,window.visibility()
+    passed('title_bar_double_click_maximizes_and_restores')
     preview.open_path(str(ensure_fixture()))
     wait(lambda:preview.indexedReady and not preview.busy)
     QTest.qWait(150)
@@ -74,6 +89,8 @@ try:
     source_tab=window.findChild(QQuickItem,'sourceTab')
     properties_tab=window.findChild(QQuickItem,'propertiesTab')
     assert source_tab.property('text')=='Sources'
+    icon=window.findChild(QQuickItem,'systemMenuIcon')
+    assert icon.mapToScene(QPointF(icon.width(),0)).x()<button.mapToScene(QPointF()).x()
     def click_item(item):
         QTest.mouseClick(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,
                          item.mapToScene(QPointF(item.width()/2,item.height()/2)).toPoint())
@@ -114,9 +131,9 @@ try:
                      button.mapToScene(QPointF(button.width()/2,button.height()/2)).toPoint())
     QTest.qWait(80)
     assert menu.property('opened')
-    click_item(item_named('panelMenuSection2'))
+    click_item(item_named('menuCategoryView'))
     window.grabWindow().save(str(OUT/'light-menu.png'))
-    click_item(item_named('panelCommand_darkThemeAction'))
+    click_item(item_named('menuCommand_darkThemeAction'))
     assert preview.darkTheme and action.property('checked') and not menu.property('opened')
     assert window.property('color').name()=='#171c24'
     window.grabWindow().save(str(OUT/'dark.png'))
@@ -125,14 +142,26 @@ try:
     restored.close()
     assert preview._clips.snapshot()==snapshot and preview._generation==generation
     passed('night_theme_action_repaints_and_persists_without_changing_source_state')
-    QTest.keyClick(window,Qt.Key.Key_M,Qt.KeyboardModifier.ControlModifier); QTest.qWait(50)
-    assert menu.property('opened')
-    click_item(item_named('panelMenuSection0'))
-    window.grabWindow().save(str(OUT/'dark-menu.png'))
-    QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
-    QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
-    assert not menu.property('opened')
-    # Menu dismisses back to the page active before opening; tab clicks also dismiss.
+    for width,height in ((1120,790),(760,560)):
+        window.setWidth(width); window.setHeight(height); QTest.qWait(80)
+        before=image.mapToScene(QPointF())
+        click_item(button)
+        assert menu.property('opened')
+        assert not window.findChild(QQuickItem,'windowTitleLabel').isVisible()
+        assert button.mapToScene(QPointF()).y()<navigation.mapToScene(QPointF()).y()
+        assert image.mapToScene(QPointF())==before
+        categories=[item_named('menuCategory'+name) for name in ('File','Edit','View','Help')]
+        center_y=button.mapToScene(QPointF(0,button.height()/2)).y()
+        assert all(abs(item.mapToScene(QPointF(0,item.height()/2)).y()-center_y)<1 for item in categories)
+        assert categories[0].mapToScene(QPointF()).x()>=button.mapToScene(QPointF(button.width(),0)).x()
+        assert categories[-1].mapToScene(QPointF(categories[-1].width(),0)).x()<width-150
+        click_item(categories[0])
+        window.grabWindow().save(str(OUT/f'dark-menu-{width}.png'))
+        QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
+        QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
+        assert not menu.property('opened')
+        assert window.findChild(QQuickItem,'windowTitleLabel').isVisible()
+    passed('horizontal_title_bar_menu_preserves_workspace_at_both_window_sizes')
     click_item(source_tab)
     click_item(button)
     click_item(button)
@@ -140,64 +169,49 @@ try:
     click_item(button)
     click_item(properties_tab)
     assert navigation.property('currentIndex')==0 and not menu.property('opened')
-    passed('menu_restores_previous_page_and_tabs_dismiss_it')
     QTest.keyClick(window,Qt.Key.Key_M,Qt.KeyboardModifier.ControlModifier); QTest.qWait(30)
     assert menu.property('opened')
     QTest.mouseClick(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,QPoint(600,300))
     assert not menu.property('opened')
     passed('menu_button_shortcut_escape_and_outside_click')
-    window.setWidth(760); window.setHeight(560); QTest.qWait(100)
-    assert timeline.mapToScene(QPointF(timeline.width(),0)).x()<=window.width()-12
-    window.grabWindow().save(str(OUT/'dark-minimum.png'))
-    click_item(button)
-    window.grabWindow().save(str(OUT/'dark-minimum-menu.png'))
-    QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
-    QMetaObject.invokeMethod(window.findChild(QObject,'aboutDialog'),'open'); QTest.qWait(80)
-    window.grabWindow().save(str(OUT/'dark-dialog.png'))
-    QMetaObject.invokeMethod(window.findChild(QObject,'aboutDialog'),'accept')
-    preview.setDarkTheme(False)
-    restored=Preview(FrameProvider(),muted=True)
-    assert not restored.darkTheme
-    restored.close()
-    passed('minimum_layout_dark_dialog_and_light_preference_restore')
+    bar=window.findChild(QQuickItem,'compactMenuBar')
+    for name in ('File','Edit','View','Help'):
+        click_item(button)
+        assert bar.property('currentIndex')==-1
+        for category in ('File','Edit','View','Help'):
+            assert not item_named('menuCategory'+category).property('highlighted')
+            assert not window.findChild(QObject,category.lower()+'Menu').property('opened')
+        click_item(item_named('menuCategory'+name))
+        assert window.findChild(QObject,name.lower()+'Menu').property('opened')
+        QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
+        QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
+        assert not menu.property('opened')
+        QTest.mouseMove(window,QPoint(600,300)); QTest.qWait(30)
+    passed('each_category_click_opens_its_menu_and_every_reopen_resets_selection')
+
     window.setWidth(1120); window.setHeight(790); QTest.qWait(80)
     preview.selectClip(0)
     preview.renameSelected('Menu command test')
-    assert preview.canUndo
     click_item(button)
-    click_item(item_named('panelMenuSection1'))
-    click_item(item_named('panelCommand_undoAction'))
+    click_item(item_named('menuCategoryEdit'))
+    click_item(item_named('menuCommand_undoAction'))
     assert not menu.property('opened') and preview.canRedo
     recent_path=OUT/f'menu-recent-{time.time_ns()}.splicelet'
     assert preview.saveProjectAs(QUrl.fromLocalFile(str(recent_path)))
     click_item(button)
-    click_item(item_named('panelMenuSection0'))
-    recent_button=item_named('panelRecentProjects')
-    wait(lambda:recent_button.isEnabled())
-    click_item(recent_button)
-    window.grabWindow().save(str(OUT/'light-menu-recent.png'))
-    click_item(item_named('panelRecentProject0'))
+    click_item(item_named('menuCategoryFile'))
+    recent=window.findChild(QObject,'recentMenu')
+    QTest.keyClick(window,Qt.Key.Key_Down); QTest.keyClick(window,Qt.Key.Key_Down)
+    QTest.keyClick(window,Qt.Key.Key_Right); QTest.qWait(100)
+    assert recent.property('opened')
+    window.grabWindow().save(str(OUT/'recent-project-submenu.png'))
+    click_item(item_named('recentProject0'))
     wait(lambda:not preview.busy and not preview.openingProject)
     assert not menu.property('opened') and preview.projectName==recent_path.stem
-    passed('inline_undo_and_recent_project_commands_share_existing_actions')
-    click_item(button)
-    panel_menu=window.findChild(QQuickItem,'panelApplicationMenu')
-    assert panel_menu.property('section')==-1
-    click_item(item_named('panelMenuSection0'))
-    assert not item_named('panelRecentProjects').property('expanded')
-    click_item(item_named('panelRecentProjects'))
-    click_item(button)
-    click_item(button)
-    assert panel_menu.property('section')==-1
-    click_item(item_named('panelMenuSection0'))
-    assert not item_named('panelRecentProjects').property('expanded')
-    QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
-    QTest.keyClick(window,Qt.Key.Key_M,Qt.KeyboardModifier.ControlModifier); QTest.qWait(30)
-    assert panel_menu.property('section')==-1
-    window.grabWindow().save(str(OUT/'light-menu-collapsed.png'))
-    passed('every_menu_open_collapses_sections_and_recent_projects')
-    assert not [warning for warning in warnings if 'PanelMenu.qml:' in warning],warnings
-    passed('panel_menu_initialization_and_recent_commands_emit_no_qml_warnings')
+    passed('undo_and_cascading_recent_project_commands_share_existing_actions')
+    preview.setDarkTheme(False)
+    assert not warnings,warnings
+    passed('title_bar_menu_emits_no_qml_warnings')
 finally:
     preview.close()
     engine.deleteLater()

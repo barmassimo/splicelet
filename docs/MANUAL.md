@@ -7,8 +7,17 @@ For installation, see the [README](../README.md).
 ## Workspace and projects
 
 Open `Launch Splicelet.cmd`. The left panel switches between **Properties** and
-**Sources**. Its three-line button, or **Ctrl+M**, opens File/Edit/View/Help
-inside the panel. Esc or clicking the preview/timeline dismisses it.
+**Sources**. The three-line button in the window title bar, or **Ctrl+M**,
+reveals **File / Edit / View / Help** horizontally beside it, temporarily hiding
+the window title until the menu closes. Every opening starts with no category
+selected. Click a category to open its commands. Commands open
+below their category; second-level menus open to the side. The side panel stays
+available and opening the menu does not resize the workspace. Esc, the three-line
+button, or clicking the preview/timeline dismisses it. Drag the title bar to move
+the window; double-click it to maximize/restore. Windows window controls remain
+available on the right. The Splicelet icon to the left of the three-line button
+opens the Windows system menu; double-clicking the icon closes the application,
+with the usual save/discard/cancel prompt for unsaved changes.
 **View > Night theme** saves a per-user appearance preference.
 Authored UI text is English; native file dialogs follow Windows language settings.
 Numeric fields require a decimal point, such as `6.25`.

@@ -201,6 +201,24 @@ layout, project and group-edit probes default to the same generated source;
 reports are under `appearance-tests`, `edge-space-tests`, `layout-tests`,
 `project-tests` and `group-edit-tests`, each with `report.json`.
 
+The appearance probe checks title-bar double-click maximize/restore and menu
+alignment with the hamburger. Offscreen rendering has no Windows safe-area
+margins; also run this probe on the Windows platform after title-bar changes,
+using the configured runtime paths above:
+
+```powershell
+$env:QT_QPA_PLATFORM = 'windows'
+& "$SpliceletRuntime\python.exe" scripts/probe_appearance.py
+Remove-Item Env:QT_QPA_PLATFORM
+```
+
+This installs the same native frame filter as startup, opens and operates real
+windows, and writes the same appearance report and captures. Its QTest clicks
+still bypass OS hit testing: also check category clicks, hamburger reopen reset,
+double-click maximize/restore, icon system-menu/double-click close, and dragging
+with real mouse input after changes
+to the native frame. Allow the probe to finish before interacting with its windows.
+
 `probe_clip_export.py`, `probe_splicelet_audio.py`, `probe_group_edits.py`,
 `probe_real_source.py` and `probe_portable.py` accept an optional source argument.
 Without it they use the generated fixture. Custom files must still meet each
