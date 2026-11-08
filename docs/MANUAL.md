@@ -10,7 +10,8 @@ Open `Launch Splicelet.cmd`. The left panel switches between **Properties** and
 **Sources**. The three-line button in the window title bar, or **Ctrl+M**,
 reveals **File / Edit / View / Help** horizontally beside it, temporarily hiding
 the window title until the menu closes. Every opening starts with no category
-selected. Click a category to open its commands. Commands open
+selected. Hover over a category to open its commands and move across categories
+to switch menus; clicking and keyboard navigation also remain available. Commands open
 below their category; second-level menus open to the side. The side panel stays
 available and opening the menu does not resize the workspace. Esc, the three-line
 button, or clicking the preview/timeline dismisses it. Drag the title bar to move

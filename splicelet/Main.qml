@@ -259,7 +259,21 @@ ApplicationWindow {
             // Keep the bar instantiated so shared shortcuts stay registered.
             visible: appMenu.opened
             height: titleBar.height
-            delegate: MenuBarItem { objectName: "menuCategory" + text; height: titleBar.height }
+            delegate: MenuBarItem {
+                id: categoryItem
+                objectName: "menuCategory" + text
+                height: titleBar.height
+                hoverEnabled: true
+                onHoveredChanged: {
+                    if (!hovered || !appMenu.opened || !menu || menu.opened) return
+                    for (let i=0; i<compactMenu.count; ++i) {
+                        const item=compactMenu.itemAt(i)
+                        if (item===categoryItem) compactMenu.currentIndex=i
+                        else if (item && item.menu) item.menu.close()
+                    }
+                    if (!menu.opened) menu.popup(categoryItem,0,height)
+                }
+            }
             topPadding: 0; bottomPadding: 0; leftPadding: 0; rightPadding: 0
             background: Item {}
             Menu {

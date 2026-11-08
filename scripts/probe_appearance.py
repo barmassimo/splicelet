@@ -188,6 +188,25 @@ try:
         assert not menu.property('opened')
         QTest.mouseMove(window,QPoint(600,300)); QTest.qWait(30)
     passed('each_category_click_opens_its_menu_and_every_reopen_resets_selection')
+    click_item(button)
+    for name in ('File','Edit','View','Help','File'):
+        category=item_named('menuCategory'+name)
+        point=category.mapToScene(QPointF(category.width()/2,category.height()/2)).toPoint()
+        QTest.mouseMove(window,point); QTest.qWait(120)
+        assert window.findChild(QObject,name.lower()+'Menu').property('opened'),name
+        assert all(not window.findChild(QObject,other.lower()+'Menu').property('opened')
+                   for other in ('File','Edit','View','Help') if other!=name)
+    window.grabWindow().save(str(OUT/'hover-menu.png'))
+    QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
+    QTest.keyClick(window,Qt.Key.Key_Escape); QTest.qWait(30)
+    QTest.mouseMove(window,QPoint(600,300)); QTest.qWait(30)
+    click_item(button)
+    assert bar.property('currentIndex')==-1
+    assert all(not item_named('menuCategory'+name).property('highlighted')
+               for name in ('File','Edit','View','Help'))
+    click_item(button)
+    passed('hover_opens_first_category_switches_menus_and_preserves_reopen_reset')
+
 
     window.setWidth(1120); window.setHeight(790); QTest.qWait(80)
     preview.selectClip(0)

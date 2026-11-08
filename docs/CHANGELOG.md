@@ -12,6 +12,13 @@ independent of each other and of the public Git history.
   its increment is committed or tagged; select the increment from the combined
   scope of the pending changes.
 
+## 1.5.1 — Unreleased
+
+### Fixed
+
+- Open first-level application menus on hover and switch categories without
+  requiring an initial click, keeping the hamburger reopen selection reset.
+
 ## 1.5.0 — Unreleased
 
 ### Added
