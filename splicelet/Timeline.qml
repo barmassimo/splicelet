@@ -26,7 +26,7 @@ Item {
     onFollowPositionChanged: followPlayhead()
     onVisibleDurationChanged: followPlayhead()
     onFollowEnabledChanged: if (followEnabled) followPlayhead()
-    readonly property real totalDuration: Math.max(.001,preview.workspaceDuration,resizeIndex>=0 ? resizeEnd+secondsPerPixel*40 : 0)
+    readonly property real totalDuration: Math.max(.001,preview.workspaceDuration,resizeIndex>=0 && resizeMoved && resizeSide==="right" ? resizeEnd+secondsPerPixel*40 : 0)
     readonly property real visibleDuration: viewDuration>0 ? Math.min(Math.max(.001,preview.workspaceDuration),viewDuration) : Math.max(.001,preview.duration)
     readonly property real secondsPerPixel: visibleDuration/span
     readonly property real tickStep: chooseTick()
@@ -39,6 +39,7 @@ Item {
     property real pressView: 0
     property real originalStart: 0
     property int resizeIndex: -1
+    property bool resizeMoved: false
     property string resizeSide: "right"
     property real resizeStart: 0
     property real resizeEnd: 0
@@ -86,6 +87,8 @@ Item {
     }
     function updateResize(x,modifiers) {
         resizeMouseX=x; resizeModifiers=modifiers
+        if (!resizeMoved && Math.abs(x-pressX)<4) return
+        resizeMoved=true
         let target=resizeOriginalEdge+(x-pressX)*secondsPerPixel+viewStart-pressView
         let result=preview.resizeTarget(resizeIndex,resizeSide,target,secondsPerPixel,Boolean(modifiers & Qt.AltModifier))
         resizeStart=result.start; resizeEnd=result.end
@@ -155,7 +158,7 @@ Item {
         }
     }
     Timer {
-        interval: 40; repeat: true; running: timeline.resizeIndex>=0
+        interval: 40; repeat: true; running: timeline.resizeIndex>=0 && timeline.resizeMoved
         onTriggered: {
             let delta=timeline.resizeMouseX>timeline.width-timeline.inset-20 ? 1 : timeline.resizeMouseX<timeline.inset+20 ? -1 : 0
             if (delta) {
@@ -521,6 +524,7 @@ Item {
                                 preview.movingClips(clipEdges.modelData.index)
                                 let x=mapToItem(timeline,mouse.x,mouse.y).x
                                 timeline.pressX=x; timeline.pressView=timeline.viewStart
+                                timeline.resizeMoved=false
                                 timeline.resizeIndex=clipEdges.modelData.index
                                 timeline.resizeSide=edge.modelData
                                 timeline.resizeOriginalEdge=edge.modelData==="left" ? clipEdges.modelData.start : clipEdges.modelData.end
@@ -533,11 +537,13 @@ Item {
                                 let index=timeline.resizeIndex
                                 let side=timeline.resizeSide
                                 let target=side==="left" ? timeline.resizeStart : timeline.resizeEnd
+                                let moved=timeline.resizeMoved
                                 timeline.resizeIndex=-1
+                                timeline.resizeMoved=false
                                 timeline.interacted()
-                                preview.resizeClip(index,side,target)
+                                if (moved) preview.resizeClip(index,side,target)
                             }
-                            onCanceled: timeline.resizeIndex=-1
+                            onCanceled: { timeline.resizeIndex=-1; timeline.resizeMoved=false }
                         }
                     }
                 }

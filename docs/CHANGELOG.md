@@ -12,6 +12,14 @@ independent of each other and of the public Git history.
   its increment is committed or tagged; select the increment from the combined
   scope of the pending changes.
 
+## 1.6.1 — Unreleased
+
+### Fixed
+
+- Require horizontal dragging before clip-edge trimming starts autoscrolling or
+  adding temporary timeline space, preventing stationary presses from extending
+  the last clip or briefly showing the scrollbar.
+
 ## 1.6.0 — Unreleased
 
 ### Added

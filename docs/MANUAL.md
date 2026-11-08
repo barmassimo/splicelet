@@ -120,6 +120,8 @@ edge scrolls. Partial outer overlaps can create crossfades, but another clip
 cannot occupy an internal group gap.
 
 Trimming retains at least one frame and respects available source material.
+Holding a clip edge without dragging does not resize or scroll the timeline;
+small pointer movements below the drag threshold are ignored.
 Joined clips retain their edited trim reserves: re-extending a join restores
 retained pieces without resurrecting deliberately deleted material.
 Video-derived cuts/trims follow actual source frame edges. Audio-only sources

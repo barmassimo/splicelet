@@ -98,7 +98,10 @@ multiply and are applied before crossfade weights. Linked lanes transition
 together; unlinked lanes independently. There is no automatic audio declicking.
 
 Timeline input layers keep both overlap trim edges reachable and selected bodies
-draggable. Use `WheelHandler` for wheel input: a full-area no-button `MouseArea`
+draggable. Trim previews, temporary right-edge space and edge autoscroll start
+only after a four-pixel horizontal drag threshold, matching clip body movement;
+stationary edge presses do not commit a trim. Use `WheelHandler` for wheel input:
+a full-area no-button `MouseArea`
 previously overrode trim cursor shapes. Snapping is pixel-based with Alt bypass.
 
 ## Background work and playback
