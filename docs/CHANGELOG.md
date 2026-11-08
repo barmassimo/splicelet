@@ -12,6 +12,13 @@ independent of each other and of the public Git history.
   its increment is committed or tagged; select the increment from the combined
   scope of the pending changes.
 
+## 1.7.0 — Unreleased
+
+### Added
+
+- Add Join, Delete and Duplicate to the Edit menu, with their existing shortcuts
+  displayed beside the commands.
+
 ## 1.6.1 — Unreleased
 
 ### Fixed

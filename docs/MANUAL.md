@@ -105,12 +105,12 @@ which includes everything between its outer boundaries.
 | Action | Control and behavior |
 |---|---|
 | Split | **C** or scissors: split before the displayed frame; it becomes the right clip's first frame. Empty clips are prevented. |
-| Delete | **Delete** removes selected clips and leaves gaps. Other clips stay in place. |
+| Delete | **Delete** or **Edit > Delete** removes selected clips and leaves gaps. Other clips stay in place. |
 | Close a gap | Hover the gap and click its trash icon. Later clips in that lane move left and the project shortens where possible. Undo restores it. |
-| Join | **J** joins exactly two selected, touching or partially overlapping consecutive clips, retaining source pieces, crossfades and outer fades. |
+| Join | **J** or **Edit > Join** joins exactly two selected, touching or partially overlapping consecutive clips, retaining source pieces, crossfades and outer fades. |
 | Move | Drag a clip body. Dragging an unselected clip selects and moves it alone. |
 | Trim | Drag a clip edge to hide/reveal source material without changing speed or the opposite edge. |
-| Duplicate | **D** copies the selected clip, or the clip under the playhead without a selection. |
+| Duplicate | **D** or **Edit > Duplicate** copies the selected clip, or the clip under the playhead without a selection. |
 
 A selected group moves together only when consecutive in timeline order.
 Internal gaps remain; an unselected clip between selected clips blocks movement.

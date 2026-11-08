@@ -147,7 +147,7 @@ ApplicationWindow {
         contentItem: RowLayout {
             spacing: 0
             Label { text: menuItem.text; color: menuItem.enabled ? theme.text : theme.disabled; Layout.fillWidth: true; Layout.rightMargin: 28 }
-            Label { text: menuItem.action ? (menuItem.action.objectName==="redoAction" ? "Ctrl+Shift+Z / Ctrl+Y" : (menuItem.action.shortcut || "")) : ""; color: theme.muted; font.pixelSize: 12 }
+            Label { text: menuItem.action ? (menuItem.action.objectName==="redoAction" ? "Ctrl+Shift+Z / Ctrl+Y" : (menuItem.action.shortcutLabel || menuItem.action.shortcut || "")) : ""; color: theme.muted; font.pixelSize: 12 }
             Item {
                 Layout.preferredWidth: 16; Layout.preferredHeight: 16; Layout.leftMargin: 12
                 Canvas {
@@ -323,6 +323,11 @@ ApplicationWindow {
                 delegate: ShortcutMenuItem {}
                 Action { objectName: "undoAction"; text: "Undo"; shortcut: "Ctrl+Z"; enabled: preview.canUndo && (root.transportKeysEnabled || editMenu.opened || appMenu.opened); onTriggered: { properties.finishEditing(); preview.undoCut() } }
                 Action { objectName: "redoAction"; text: "Redo"; shortcut: "Ctrl+Shift+Z"; enabled: preview.canRedo && (root.transportKeysEnabled || editMenu.opened || appMenu.opened); onTriggered: { properties.finishEditing(); preview.redoCut() } }
+                MenuSeparator {}
+                // Shortcuts stay separate to preserve their non-repeating key behavior.
+                Action { objectName: "joinAction"; property string shortcutLabel: "J"; text: "Join"; enabled: preview.canJoin && !preview.busy && root.fileDialogsClosed; onTriggered: { properties.finishEditing(); preview.joinSelected() } }
+                Action { objectName: "deleteAction"; property string shortcutLabel: "Delete"; text: "Delete"; enabled: preview.selectionCount>0 && !preview.busy && root.fileDialogsClosed; onTriggered: { properties.finishEditing(); preview.deleteSelected() } }
+                Action { objectName: "duplicateAction"; property string shortcutLabel: "D"; text: "Duplicate"; enabled: preview.indexedReady && !preview.busy && root.fileDialogsClosed; onTriggered: { properties.finishEditing(); preview.duplicateSelected() } }
                 MenuSeparator {}
                 Action { objectName: "unlinkAudioAction"; text: "Unlink audio"; enabled: preview.canUnlink && !preview.busy && root.fileDialogsClosed; onTriggered: { properties.finishEditing(); preview.unlinkAudio() } }
                 Action { objectName: "addStartSpaceAction"; text: "Add space at start..."; enabled: preview.canSaveProject && !preview.busy && root.fileDialogsClosed && timeline.dragIndex<0 && timeline.resizeIndex<0; onTriggered: root.openSpaceDialog("start") }
