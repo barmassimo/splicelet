@@ -52,11 +52,23 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
 
 ## Versioning
 
-- Use `MAJOR.MINOR.PATCH` for the application version. For each completed set of
-  application changes, update `__version__` in `splicelet/__init__.py` once:
+- Use `MAJOR.MINOR.PATCH` for the application version. Increment once per pending
+  set of application changes, not once per request or follow-up. Before changing
+  `__version__` in `splicelet/__init__.py`, inspect the version in HEAD, the working
+  tree and existing tags. If a pending version increment has neither been
+  committed nor tagged, keep that version for further changes and fixes, and
+  consolidate their CHANGELOG notes under the same version. A commit containing
+  the increment or a tag for that version establishes a new versioning baseline;
+  do not rewrite existing commits or tags to consolidate earlier increments.
+  Apply this rule to all three version components. Choose the increment from
+  the baseline according to the combined scope of the pending changes:
   increment MINOR (the second number) for new functionality and reset PATCH to 0;
   increment PATCH (the third number) for fixes without new functionality.
   If a change includes both features and fixes, use a MINOR increment.
+  If the pending scope grows from fixes to new functionality, replace the pending
+  PATCH increment with a MINOR increment from the baseline, rather than adding
+  another increment. For example, from committed `1.3.0`, pending features use
+  `1.4.0`; follow-up fixes retain `1.4.0` until it is committed or tagged.
 - Propose a MAJOR increment (the first number) when warranted, explaining why,
   but never apply it automatically; obtain the user's explicit agreement first.
 - Documentation-only, test-only and development-tooling-only changes do not

@@ -4,6 +4,14 @@ The first public source snapshot is version 1.2.1. Earlier local development is
 summarized below; application versions and project file format versions are
 independent of each other and of the public Git history.
 
+## Unreleased
+
+### Development
+
+- Consolidate follow-up changes under the same pending application version until
+  its increment is committed or tagged; select the increment from the combined
+  scope of the pending changes.
+
 ## 1.5.0 — Unreleased
 
 ### Added
