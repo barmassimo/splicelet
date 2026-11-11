@@ -103,6 +103,7 @@ def restore(data,times,duration,sources=()):
         if type(linked) is not bool: raise ValueError('Invalid audio/video link mode.')
         if video.origin!=audio.origin or video.extent!=audio.extent or (linked and video.clips!=audio.clips):
             raise ValueError('Invalid linked lanes or project bounds.')
+        audio.selected_ids.clear(); audio.selection_anchor = None
         return Tracks(video,audio,linked)
     model = Clips(len(times),times,duration)
     model.sources = sources

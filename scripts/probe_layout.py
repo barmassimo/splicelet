@@ -221,6 +221,29 @@ try:
         assert abs(playhead.x()-timeline.width()/2)<1e-5,(playhead.x(),timeline.width())
         assert follow.property('checked') and timeline.property('followEnabled')
     assert not follow.property('checked')
+    # Boundary shortcuts recenter even when the playhead already sits at the
+    # destination and the viewport has since been panned away.
+    for tracking in (False,True):
+        timeline.setProperty('followEnabled',tracking)
+        timeline.setProperty('viewDuration',preview.duration/20)
+        for key,target in ((Qt.Key.Key_End,preview._index[-1]),(Qt.Key.Key_Home,0)):
+            for repeat in range(2):
+                timeline.setProperty('viewStart',preview.duration/3)
+                zoom=timeline.property('visibleDuration')
+                QTest.keyClick(window,key); wait(lambda:not preview.busy); QTest.qWait(30)
+                assert abs(preview.position-target)<1e-6,(key,preview.position,target)
+                assert abs(playhead.x()-timeline.width()/2)<1e-5
+                assert timeline.property('visibleDuration')==zoom
+                assert timeline.property('followEnabled')==tracking
+                assert follow.property('checked')==tracking
+        window.grabWindow().save(str(OUT/('home-follow.png' if tracking else 'home-centered.png')))
+    timeline.setProperty('followEnabled',False)
+    timeline.setProperty('viewDuration',0)
+    for key in (Qt.Key.Key_End,Qt.Key.Key_Home):
+        QTest.keyClick(window,key); wait(lambda:not preview.busy); QTest.qWait(30)
+        assert timeline.property('viewStart')==0
+        assert not timeline.property('followEnabled')
+    passed('home_end_center_zoomed_playhead_preserve_follow_and_zoom_and_keep_fit_view')
     toggle_follow()
     assert follow.property('checked') and not window.property('fullScreen')
     assert timeline.property('viewStart')==0  # Fit view stays unchanged.

@@ -68,13 +68,18 @@ preview engine. Live imports use PyAV, rather than an FFprobe subprocess.
   outer constituent envelopes. QML presents the group as one clip without
   highlighting its internal transitions.
 - `Tracks` owns a `Clips` per lane. Linked changes copy the edited lane to its
-  partner atomically; unlinked edits remain local. Frame schedules include black
-  gaps. QML/worker float seconds and FFmpeg AVTB boundaries mean the complete
+  partner atomically. Unlinked selections can span both lanes; group moves apply
+  one exact offset, validated on temporary lane models before either is committed.
+  Selected clips must be consecutive within each lane. Moves and mixed-selection
+  deletion create one history entry; other edits remain local. Frame schedules
+  include black gaps. QML/worker float seconds and FFmpeg AVTB boundaries mean the complete
   pipeline is not rational end to end or submicrosecond-exact.
 - Stable IDs track clips/selection. History snapshots include both lanes, link
   mode, active lane and ID counters. New edits invalidate redo. Imported library
   entries remain outside timeline Undo. Selected length is the union of selected
-  intervals; export selection uses their outer bounds instead.
+  intervals across selected lanes, counting simultaneous audio/video once;
+  export selection uses their outer bounds instead. Selections are not saved in
+  project files; opening a project initially selects its first video clip.
 
 The first imported video fixes the canvas even if unused. Audio-only projects
 provisionally use 640×360. Later videos fit by display aspect with bilinear scaling,

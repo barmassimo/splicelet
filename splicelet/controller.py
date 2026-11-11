@@ -340,9 +340,23 @@ class Preview(QObject):
         if isinstance(self._clips,Tracks): return [('video',self._clips.video),('audio',self._clips.audio)]
         return [('video',self._clips)] if self._clips else []
 
-    def _activate_index(self,index):
-        if isinstance(self._clips,Tracks): self._clips.activate('audio' if index>=1000000 else 'video')
+    def _activate_index(self,index,preserve_selection=False):
+        if isinstance(self._clips,Tracks): self._clips.activate('audio' if index>=1000000 else 'video',preserve_selection)
         return index%1000000
+
+    def _selected_items(self):
+        lanes = self._lanes()
+        if self.lanesLinked: lanes = [(self._clips.lane,self._clips.active)]
+        return [(lane,model,i,c) for lane,model in lanes for i,c in enumerate(model.clips) if c.uid in model.selected_ids]
+
+    def _moving_items(self,index):
+        if isinstance(self._clips,Tracks):
+            groups = self._clips.moving_groups(index)
+            if self.lanesLinked and self._has_audio and groups:
+                groups = tuple((lane,model,groups[0][2]) for lane,model in self._lanes())
+        else:
+            groups = (('video',self._clips,self._clips.moving_indices(index)),) if self._clips else ()
+        return [(lane,model,i,model.clips[i]) for lane,model,indices in groups for i in indices]
 
     @Property('QVariantList',notify=editChanged)
     def clips(self):
@@ -352,7 +366,7 @@ class Preview(QObject):
             if lane=='audio' and not self._has_audio: continue
             for i,clip in enumerate(model.clips):
                 linked = isinstance(self._clips,Tracks) and self._clips.linked
-                selected = clip.uid in self._clips.selected_ids and (linked or self._clips.active is model) if isinstance(self._clips,Tracks) else i in model.selected_indices
+                selected = clip.uid in (self._clips.selected_ids if linked else model.selected_ids)
                 result.append({'index':i+(1000000 if lane=='audio' else 0),'lane':lane,'linked':linked,
                     'start':self._clip_start(clip),'end':self._clip_end(clip),'selected':selected,
                     'startRatio':self._clip_start(clip)/self._duration,'endRatio':self._clip_end(clip)/self._duration,
@@ -465,15 +479,19 @@ class Preview(QObject):
             self._editing_changed(False)
 
     @Property(int,notify=editChanged)
-    def selectedClip(self): return self._clips.selected if self._clips else -1
+    def selectedClip(self):
+        items = self._selected_items()
+        return items[0][2] if len(items)==1 else -1
     @Property(int,notify=editChanged)
-    def selectionCount(self): return len(self._clips.selected_indices) if self._clips else 0
+    def selectionCount(self): return len(self._selected_items())
     @Property(str,notify=editChanged)
     def selectedClipName(self):
-        return (self._clips.selected_clip.name or f'Clip {self.selectedClip+1}') if self.selectionCount==1 else ''
+        items = self._selected_items()
+        return (items[0][3].name or f'Clip {items[0][2]+1}') if len(items)==1 else ''
     @Property(str,notify=editChanged)
     def selectedDurationText(self):
-        return self.format_time(float(self._clips.length(self._clips.selected_clip))) if self.selectionCount==1 else ''
+        items = self._selected_items()
+        return self.format_time(float(items[0][1].length(items[0][3]))) if len(items)==1 else ''
     @Property(str,notify=editChanged)
     def selectedLengthText(self):
         return self.format_time(float(self._clips.selected_length)) if self.selectionCount else ''
@@ -485,7 +503,7 @@ class Preview(QObject):
     def canJoin(self): return self._clips.can_join if self._clips else False
     @Property('QVariantMap',notify=editChanged)
     def selectionRange(self):
-        clips = [clip for clip in self._clips.clips if clip.uid in self._clips.selected_ids] if self._clips else []
+        clips = [clip for _,_,_,clip in self._selected_items()]
         return {'start':min(self._clip_start(c) for c in clips),'end':max(self._clip_end(c) for c in clips)} if clips else {'start':0.,'end':self._duration}
     @Property('QVariantMap',notify=editChanged)
     def fadeValues(self):
@@ -528,7 +546,7 @@ class Preview(QObject):
     @Slot(int,bool)
     @Slot(int,bool,bool)
     def selectClip(self,index,toggle=False,extend_range=False):
-        index = self._activate_index(index)
+        index = self._activate_index(index,True)
         if self._clips:
             self._clips.select(index,toggle,extend_range)
             self.editChanged.emit()
@@ -536,12 +554,16 @@ class Preview(QObject):
     @Slot('QVariantList',str,'QVariantList',bool)
     def selectClips(self,indices,lane,baseline,toggle):
         if not self._clips or self._pending_project is not None: return
-        if isinstance(self._clips,Tracks): self._clips.activate(lane)
-        model = self._clips.active if isinstance(self._clips,Tracks) else self._clips
-        selected = {model.clips[int(i)%1000000].uid for i in indices if 0<=int(i)%1000000<len(model.clips)}
-        previous = {model.clips[int(i)%1000000].uid for i in baseline if 0<=int(i)%1000000<len(model.clips)}
-        model.selected_ids = previous ^ selected if toggle else selected
-        model.selection_anchor = next((c.uid for c in model.clips if c.uid in model.selected_ids),None)
+        if isinstance(self._clips,Tracks): self._clips.activate(lane,True)
+        lanes = [(lane,self._clips.active)] if self.lanesLinked else self._lanes()
+        for name,model in lanes:
+            def ids(values):
+                return {model.clips[int(i)%1000000].uid for i in values
+                        if ('audio' if int(i)>=1000000 else 'video')==name and 0<=int(i)%1000000<len(model.clips)}
+            selected,previous = ids(indices),ids(baseline)
+            model.selected_ids = previous ^ selected if toggle else selected
+            model.selection_anchor = next((c.uid for c in model.clips if c.uid in model.selected_ids),None)
+        if isinstance(self._clips,Tracks): self._clips.focus_selection()
         self.editChanged.emit()
 
     def effect_spans(self,lane='video'):
@@ -637,32 +659,30 @@ class Preview(QObject):
 
     @Slot(int,result='QVariantList')
     def movingClips(self,index):
-        index = self._activate_index(index)
+        index = self._activate_index(index,True)
         if self._clips is None: return []
-        lane = self._clips.lane if isinstance(self._clips,Tracks) else 'video'
-        lanes = ['video','audio'] if self.lanesLinked and self._has_audio else [lane]
         return [{'index':i+(1000000 if lane=='audio' else 0),'lane':lane,
-                 'start':self._clip_start(self._clips.clips[i]),'end':self._clip_end(self._clips.clips[i])}
-                for lane in lanes for i in self._clips.moving_indices(index)]
+                 'start':self._clip_start(clip),'end':self._clip_end(clip)}
+                for lane,model,i,clip in self._moving_items(index)]
 
     @Slot(int,float,float,bool,result=float)
     def moveTarget(self,index,target,seconds_per_pixel,disable_snap):
-        index = self._activate_index(index)
+        index = self._activate_index(index,True)
         if not self._clips or not 0<=index<len(self._clips.clips): return target
         clip = self._clips.clips[index]
-        indices = self._clips.moving_indices(index)
-        if not indices: return self._clip_start(clip)
-        moving = [self._clips.clips[i] for i in indices]
-        minimum = float(clip.start-moving[0].start)
+        items = self._moving_items(index)
+        if not items: return self._clip_start(clip)
+        moving = [c for _,_,_,c in items]
+        minimum = float(clip.start-min(c.start for c in moving))
         target = max(minimum,target)
         if not disable_snap:
-            ids = {c.uid for c in moving}
+            ids = {(lane,c.uid) for lane,_,_,c in items}
+            if self.lanesLinked:
+                ids.update((lane,c.uid) for lane,_ in self._lanes() for c in moving)
             anchors = [0.,self._position]
-            for _,model in self._lanes():
+            for lane,model in self._lanes():
                 for other in model.clips:
-                    same_lane = not isinstance(self._clips,Tracks) or model is self._clips.active
-                    linked_partner = isinstance(self._clips,Tracks) and self._clips.linked
-                    if other.uid not in ids or not (same_lane or linked_partner): anchors += [self._clip_start(other),self._clip_end(other)]
+                    if (lane,other.uid) not in ids: anchors += [self._clip_start(other),self._clip_end(other)]
             offsets = {edge-self._clip_start(clip) for c in moving for edge in (self._clip_start(c),self._clip_end(c))}
             candidates = [edge-offset for edge in anchors for offset in offsets if edge-offset>=minimum]
             closest = min(candidates,key=lambda start:abs(start-target))
@@ -671,13 +691,13 @@ class Preview(QObject):
 
     @Slot(int,float)
     def moveClip(self,index,target):
-        index = self._activate_index(index)
+        index = self._activate_index(index,True)
         if self._clips:
             if self._clips.move_selection(index,target):
                 self._status = 'Clips moved.' if self.selectionCount>1 else 'Clip moved.'
                 self._editing_changed()
             else:
-                self._status = 'Cannot move: select consecutive clips; nested and triple overlaps are not supported.'
+                self._status = 'Cannot move: select consecutive clips in each lane; nested and triple overlaps are not supported.'
                 self.changed.emit()
 
     @Slot(int,str,float,float,bool,result='QVariantMap')
@@ -705,6 +725,10 @@ class Preview(QObject):
     @Slot()
     def duplicateSelected(self):
         if self._clips is None: return
+        if self.selectionCount>1:
+            self._status = 'Cannot duplicate: select one clip with enough adjacent space.'
+            self.changed.emit()
+            return
         index = self._clips.selected
         if not self.selectionCount:
             index = next((i for i,clip in enumerate(self._clips.clips) if self._clip_start(clip)<=self._position<self._clip_end(clip)),-1)
@@ -729,7 +753,7 @@ class Preview(QObject):
         if self._clips is None: raise ValueError('Wait for video indexing to finish.')
         if selected and not self.selectionCount: raise ValueError('Select a timeline interval to export.')
         if not math.isfinite(level) or level>0: raise ValueError('Normalization level must be a finite number less than or equal to 0 dBFS.')
-        clip = next((c for c in self._clips.clips if c.uid in self._clips.selected_ids),None) if selected else None
+        clip = next((c for _,_,_,c in self._selected_items()),None) if selected else None
         a,b = (clip.pieces[0][0],clip.pieces[-1][1]) if clip else (0,len(self._video_pts))
         window = self.selectionRange if selected else {'start':0.,'end':self._duration}
         if window['end']<=window['start']: raise ValueError('The export interval is empty.')

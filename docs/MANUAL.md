@@ -70,6 +70,7 @@ sources contribute black video. Import does not transcode sources.
 | Play/pause | Space |
 | Seek backward/forward 5 seconds | Left / Right |
 | Previous/next clip boundary, including gaps | Ctrl+Left / Ctrl+Right |
+| Go to project start/end and center the playhead when zoomed | Home / End |
 | Previous/next frame; pause | `<` / `>` or transport buttons |
 | Seek to time | Enter seconds or `hh:mm:ss.mmm` in the time field |
 | Seek/scrub | Click/drag horizontally on the ruler |
@@ -95,8 +96,10 @@ Click a clip to select without seeking. **Ctrl+click** toggles individual clips.
 **Shift+click** selects an inclusive range from the last clicked clip; repeated
 Shift clicks keep that anchor. **Ctrl+Shift+click** adds the range.
 Drag **down from the ruler** to select clips touched by a rectangle; **Ctrl**
-toggles them against the starting selection. With unlinked lanes the rectangle
-acts on the active lane: click a clip in that lane first.
+toggles them against the starting selection. With unlinked lanes, Ctrl+click
+and rectangles can select clips from both video and audio. A plain click
+replaces the selection; Shift+click selects a range in the clicked lane, and
+Ctrl+Shift+click adds that lane's range to the selection.
 
 **Selected length** sums occupied selected time, excluding gaps and counting
 overlaps and linked pairs once. This differs from the export selection window,
@@ -112,8 +115,13 @@ which includes everything between its outer boundaries.
 | Trim | Drag a clip edge to hide/reveal source material without changing speed or the opposite edge. |
 | Duplicate | **D** or **Edit > Duplicate** copies the selected clip, or the clip under the playhead without a selection. |
 
-A selected group moves together only when consecutive in timeline order.
+A selected group moves together only when consecutive in each selected lane.
 Internal gaps remain; an unselected clip between selected clips blocks movement.
+After unlinking, dragging any selected clip moves the selected video and audio
+clips by the same amount, retaining their relative timing without relinking them.
+An invalid overlap in either lane cancels the entire move. Delete also removes
+the selection from both lanes as one undoable operation. Join requires a
+selection in one lane; duplication requires exactly one clip.
 Moves never ripple other clips and produce one undo entry. Edges snap to other
 boundaries and the playhead; **Alt** bypasses snapping. Dragging near a viewport
 edge scrolls. Partial outer overlaps can create crossfades, but another clip
@@ -143,8 +151,10 @@ duplication, joins, deletion and gap closure affect both partners.
 **Edit > Unlink audio** separates the whole project without requiring selection.
 There is no relink command; Undo can undo unlinking.
 
-After unlinking, click a clip to choose the active lane. Editing and gap closure
+After unlinking, click a clip to choose the active lane. Splitting and gap closure
 affect only that lane, so close matching gaps separately to preserve alignment.
+Trimming affects the dragged clip. A selection can span both lanes for movement,
+deletion and selection-window export; this does not restore the global link.
 Library drops affect the destination lane; **+** appends video files to video
 and audio files to audio. Seeking, movement and trimming snap across lanes.
 Add-space commands still affect both lanes. Additional mixing/overlay lanes
@@ -155,10 +165,11 @@ are not available.
 With exactly one clip selected, **Properties** shows its name, duration and fades.
 Names accept up to 120 characters; Enter or leaving the field commits, and
 clearing restores the automatic name. Splits/duplicates inherit names; joins
-retain the left clip's name. Hover a clip for its name, range and duration.
+retain the left clip's name. The timeline does not show hover tooltips.
 
 Audio and video fade-in/out are independent; video fades to/from black.
-Linked mode shows both groups; unlinked mode shows the selected lane's controls.
+Linked mode shows Video above Audio, matching the timeline lane order; unlinked
+mode shows the selected lane's controls.
 Sliders cover **0–4 s** in **0.01 s** steps; text fields accept other nonnegative
 durations. **0** disables a fade. Enter/leaving a field commits; sliders commit
 on release. Fades are linear, clamped to clip duration, and overlapping envelopes
@@ -198,6 +209,8 @@ require an application version supporting that format.
 | Center playhead while zoomed | F or View > Follow |
 
 Follow allows empty space beyond project edges to keep the playhead centered.
+Home and End also center the playhead when zoomed, preserving zoom and the Follow
+setting. At full-project zoom, they keep the full timeline visible.
 The playhead head and line turn orange while Follow is active, in both themes.
 Zoom (including trackpad zoom and Z) preserves Follow. Pressing the ruler or a
 clip (including its trim edges), rectangle selection, manual panning or scrollbar
@@ -206,8 +219,8 @@ use releases it. Import/open resets Follow; it is not saved with projects.
 Thumbnails use sparse keyframes and can repeat at high zoom; they are approximate.
 The waveform combines both channels' source peaks before fades/listening gain.
 Vertical waveform zoom changes only the drawing and resets on import/open.
-Background previews are cached under `artifacts/visuals`; hover a clip for
-preparation status/errors. They never affect export. Zoomed views have a scrollbar;
+Background previews are cached under `artifacts/visuals` and never affect export.
+Zoomed views have a scrollbar;
 narrow windows place scissors, zoom and listening controls in a second row.
 
 ## Export
@@ -216,7 +229,7 @@ narrow windows place scissors, zoom and listening controls in a second row.
 **All** is the default on every opening, even with clips selected. It exports
 the full project including edge/internal gaps. **Selected** must be chosen
 explicitly: it exports from the first selected start to the last selected end
-in the active lane, including gaps and intervening clips. Both lanes render;
+across the selected lanes, including gaps and intervening clips. Both lanes render;
 missing video/audio becomes black/silence.
 
 **Normalize audio** defaults off. When enabled, **Level** defaults to `-1` dBFS

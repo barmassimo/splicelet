@@ -55,6 +55,23 @@ Rectangle {
                 }
                 Label { objectName: "clipDuration"; text: preview.selectedDurationText; color: theme.muted; font.family: "Consolas"; font.pixelSize: 11 }
             }
+            Label { visible: preview.showVideoFades; text: "Video"; font.weight: Font.DemiBold; color: theme.text; Layout.topMargin: 6 }
+            FadeControl {
+                id: videoIn
+                visible: preview.showVideoFades
+                Layout.fillWidth: true
+                title: "Fade in"; fieldName: "videoFadeIn"
+                value: preview.fadeValues.video_in
+                onCommitted: function(text) { preview.setFade("video_in",text) }
+            }
+            FadeControl {
+                id: videoOut
+                visible: preview.showVideoFades
+                Layout.fillWidth: true
+                title: "Fade out"; fieldName: "videoFadeOut"
+                value: preview.fadeValues.video_out
+                onCommitted: function(text) { preview.setFade("video_out",text) }
+            }
             Label { visible: preview.showAudioFades; text: "Audio"; font.weight: Font.DemiBold; color: theme.text; Layout.topMargin: 6 }
             FadeControl {
                 id: audioIn
@@ -73,23 +90,6 @@ Rectangle {
                 value: preview.fadeValues.audio_out
                 enabled: preview.hasAudio
                 onCommitted: function(text) { preview.setFade("audio_out",text) }
-            }
-            Label { visible: preview.showVideoFades; text: "Video"; font.weight: Font.DemiBold; color: theme.text; Layout.topMargin: 6 }
-            FadeControl {
-                id: videoIn
-                visible: preview.showVideoFades
-                Layout.fillWidth: true
-                title: "Fade in"; fieldName: "videoFadeIn"
-                value: preview.fadeValues.video_in
-                onCommitted: function(text) { preview.setFade("video_in",text) }
-            }
-            FadeControl {
-                id: videoOut
-                visible: preview.showVideoFades
-                Layout.fillWidth: true
-                title: "Fade out"; fieldName: "videoFadeOut"
-                value: preview.fadeValues.video_out
-                onCommitted: function(text) { preview.setFade("video_out",text) }
             }
             Label {
                 text: "0 disables the fade.\nSliders: 0–4 s in 0.01 s steps. You can type other durations."

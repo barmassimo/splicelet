@@ -197,6 +197,7 @@ try:
     assert preview.saveProjectAs(QUrl.fromLocalFile(str(path)))
     preview.openProject(QUrl.fromLocalFile(str(path))); wait(lambda:preview.canSaveProject and not preview.busy)
     assert project.timeline(preview._clips)==saved and not preview.projectDirty
+    assert preview.selectionCount==1 and not preview._clips.audio.selected_ids
     for mutate in (lambda d:d['timeline'].update(linked=True),lambda d:d['timeline']['audio'].update(extent=[7,1])):
         bad=copy.deepcopy(project.document(preview._clips,source)); mutate(bad)
         try: project.restore(bad,times,Fraction(6))
@@ -234,6 +235,34 @@ try:
             stream=rendered.streams.audio[0]
             assert abs(float(stream.duration*stream.time_base)-3)<.003
     passed('video_or_audio_export_window_exact_pcm_fades_black_silence_and_frame_timestamps')
+
+    full_before=preview.export_spec(False)
+    preview.selectClip(0,True)
+    assert preview.selectionCount==2 and preview.selectionRange=={'start':1.,'end':6.}
+    assert preview.selectedLengthText==preview.format_time(5)
+    assert preview.export_spec(False)==full_before
+    mixed=preview.export_spec()
+    assert mixed.start==1 and mixed.end==6 and mixed.duration==5
+    assert mixed.parts==spec.parts and mixed.audio_parts==spec.audio_parts
+    assert mixed.video_effects==spec.video_effects and mixed.audio_effects==spec.audio_effects
+    pcm=run/'mixed-selection.f32le'; ExportTask()._audio(mixed,pcm)
+    samples=np.fromfile(pcm,dtype='<f4').reshape(-1,2)
+    assert len(samples)==240000 and not np.any(samples[:96000])
+    reference=np.fromfile(run/'audio-window.f32le',dtype='<f4').reshape(-1,2)
+    np.testing.assert_array_equal(samples[96000:],reference)
+    target=run/'mixed-selection.mp4'
+    result,message=ExportTask()._execute(mixed,target); assert result=='success',message
+    with av.open(str(target)) as rendered:
+        frames=[(float(f.pts*f.time_base),float(f.to_ndarray(format='gray').mean())) for f in rendered.decode(video=0)]
+    assert len(frames)==150 and abs(frames[0][0])<.001
+    assert all(abs(stamp-i/30)<.001 for i,(stamp,_) in enumerate(frames))
+    def luma(t): return min(frames,key=lambda f:abs(f[0]-t))[1]
+    assert luma(0)<3 and 110<luma(.5)<145 and luma(1.5)>245
+    assert 110<luma(2.5)<145 and luma(3.5)<3 and luma(4.5)<3
+    with av.open(str(target)) as rendered:
+        stream=rendered.streams.audio[0]
+        assert abs(float(stream.duration*stream.time_base)-5)<.003
+    passed('mixed_selection_exports_both_outer_bounds_exact_pcm_video_pts_and_unchanged_full_spec')
 
     shifted = replace(spec,timeline_start=float(Fraction(91,30)),timeline_end=float(Fraction(181,30)))
     target=run/'offset-pts-grids.mp4'

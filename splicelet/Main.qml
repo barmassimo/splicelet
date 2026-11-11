@@ -676,8 +676,8 @@ ApplicationWindow {
     Shortcut { sequence: "D"; autoRepeat: false; enabled: root.transportKeysEnabled; onActivated: preview.duplicateSelected() }
     Shortcut { sequence: "Ctrl+Y"; enabled: root.transportKeysEnabled && preview.canRedo; onActivated: preview.redoCut() }
     Shortcut { sequence: "Escape"; autoRepeat: false; enabled: root.fullScreen && root.fileDialogsClosed; onActivated: root.toggleFullscreen() }
-    Shortcut { sequence: "Home"; enabled: root.transportKeysEnabled; onActivated: preview.seek(0) }
-    Shortcut { sequence: "End"; enabled: root.transportKeysEnabled; onActivated: preview.seek(preview.duration) }
+    Shortcut { sequence: "Home"; enabled: root.transportKeysEnabled; onActivated: { preview.seek(0); timeline.centerPlayhead() } }
+    Shortcut { sequence: "End"; enabled: root.transportKeysEnabled; onActivated: { preview.seek(preview.duration); timeline.centerPlayhead() } }
 
     ColumnLayout {
         anchors.fill: parent

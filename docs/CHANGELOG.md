@@ -6,6 +6,19 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+### Added
+
+- Select unlinked audio and video clips together with Ctrl+click or a rectangle,
+  then move them by the same offset with atomic Undo/Redo and overlap validation
+  in both lanes. Mixed selections also support deletion and selection-window export.
+
+### Changed
+
+- Show Video above Audio in Clip properties, matching the timeline lane order.
+- Remove timeline hover tooltips from video/audio clips and gap removal buttons.
+- Center the timeline on the playhead after Home/End navigation when zoomed,
+  preserving the current zoom and Follow setting.
+
 ### Development
 
 - Change application versions only when explicitly asked to create a release;

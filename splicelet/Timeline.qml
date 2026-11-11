@@ -20,9 +20,10 @@ Item {
     property real viewDuration: 0
     property bool followEnabled: false
     readonly property real followPosition: preview.position
-    function followPlayhead() {
-        if (followEnabled) viewStart = visibleDuration<totalDuration-.000001 ? preview.position-visibleDuration/2 : 0
+    function centerPlayhead() {
+        viewStart = visibleDuration<totalDuration-.000001 ? preview.position-visibleDuration/2 : 0
     }
+    function followPlayhead() { if (followEnabled) centerPlayhead() }
     onFollowPositionChanged: followPlayhead()
     onVisibleDurationChanged: followPlayhead()
     onFollowEnabledChanged: if (followEnabled) followPlayhead()
@@ -186,7 +187,7 @@ Item {
             const top=Math.min(start.y,current.y)+y, bottom=Math.max(start.y,current.y)+y
             const hits=preview.clips.filter(function(clip) {
                 const clipY=clip.lane==="audio" ? timeline.audioLaneY : 38
-                return clip.lane===lane && timeline.xAt(clip.start)<right && timeline.xAt(clip.end)-2>left
+                return (!preview.lanesLinked || clip.lane===lane) && timeline.xAt(clip.start)<right && timeline.xAt(clip.end)-2>left
                     && clipY<bottom && clipY+(clip.lane==="audio" ? timeline.audioLaneHeight : 53)>top
             }).map(function(clip) { return clip.index })
             preview.selectClips(hits,lane,selectionBaseline,toggle)
@@ -197,7 +198,7 @@ Item {
             start=Qt.point(mouse.x,mouse.y); current=start; selecting=false; gesture=""
             lane=preview.selectionLane
             toggle=Boolean(mouse.modifiers & Qt.ControlModifier)
-            selectionBaseline=preview.clips.filter(function(clip) { return clip.lane===selectionMouse.lane && clip.selected }).map(function(clip) { return clip.index })
+            selectionBaseline=preview.clips.filter(function(clip) { return (!preview.lanesLinked || clip.lane===selectionMouse.lane) && clip.selected }).map(function(clip) { return clip.index })
         }
         onPositionChanged: function(mouse) {
             if (!pressed) return
@@ -318,9 +319,6 @@ Item {
                     anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor
                     onClicked: { timeline.interacted(); preview.removeGap(gapItem.modelData.index) }
                 }
-                ToolTip.visible: trashMouse.containsMouse
-                ToolTip.delay: 500
-                ToolTip.text: "Remove the gap and shift later clips to the left"
             }
         }
     }
@@ -478,9 +476,6 @@ Item {
                     preview.endScrub(timeline.positionAt(x,mouse.modifiers))
                 }
             }
-            ToolTip.visible: clipMouse.containsMouse && !clipMouse.pressed
-            ToolTip.delay: 700
-            ToolTip.text: modelData.label+" · "+modelData.rangeText+" · Duration "+modelData.durationText+(modelData.lane==="audio" ? "\nShift+wheel: waveform display zoom (1–256×). Listening and export volume unchanged." : "")+(preview.visualsStatus ? "\n"+preview.visualsStatus : "")
         }
     }
     // Every trim edge remains reachable above both selected and unselected bodies.

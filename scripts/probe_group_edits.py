@@ -16,6 +16,7 @@ OUT=ROOT/'artifacts/group-edit-tests'
 OUT.mkdir(parents=True,exist_ok=True)
 from splicelet.editing import Clip, Clips
 from splicelet.effects import Fades
+from splicelet.tracks import Tracks
 checks=[]
 def passed(name):
     checks.append(name); print('PASS',name,flush=True)
@@ -76,6 +77,65 @@ model=fixture(); model.select(1); model.select(2,False,True)
 assert model.move_selection(4,14) and model.selected_indices=={4}
 assert [c.start for c in model.clips[:4]]==[0,3,6,9]
 passed('dragging_an_unselected_clip_moves_only_that_clip')
+
+def mixed_fixture():
+    tracks=Tracks(fixture()); tracks.unlink()
+    tracks.video.select(1); tracks.video.select(2,True)
+    tracks.activate('audio',True); tracks.select(0,True); tracks.select(1,True)
+    return tracks
+
+tracks=mixed_fixture()
+before=tracks.snapshot(); history=len(tracks.undo_stack)
+originals={lane:{c.uid:c for c in getattr(tracks,lane).clips} for lane in ('video','audio')}
+assert tracks.move_selection(1,Fraction(10,3))
+for lane in ('video','audio'):
+    model=getattr(tracks,lane)
+    for c in model.clips:
+        original=originals[lane][c.uid]
+        assert c==replace(original,start=original.start+(Fraction(1,3) if c.uid in model.selected_ids else 0))
+assert len(tracks.undo_stack)==history+1 and not tracks.linked
+after=tracks.snapshot(); tracks.undo(); assert tracks.snapshot()==before
+tracks.redo(); assert tracks.snapshot()==after
+passed('mixed_lane_move_preserves_exact_shared_delta_sources_fades_and_one_undo_redo')
+
+tracks=mixed_fixture(); before=tracks.snapshot(); history=len(tracks.undo_stack)
+# Video can move alone; audio would collide with its first unselected clip.
+assert not tracks.move_selection(1,6) and tracks.snapshot()==before
+assert len(tracks.undo_stack)==history
+tracks.audio.select(3,True)
+before=tracks.snapshot()
+assert not tracks.moving_groups(1) and not tracks.move_selection(1,4)
+assert tracks.snapshot()==before
+passed('mixed_move_collision_or_sparse_group_in_either_lane_rejects_both_without_history')
+
+tracks=mixed_fixture(); tracks.video.select(1); tracks.audio.select(1)
+before=tracks.snapshot(); history=len(tracks.undo_stack)
+assert tracks.move_selection(1,4)
+tracks.undo(); assert tracks.snapshot()==before
+tracks.video.clips.pop(2)
+before=tracks.snapshot()
+assert not tracks.move_selection(1,6) and tracks.snapshot()==before
+assert len(tracks.undo_stack)==history
+passed('single_clip_per_lane_candidates_do_not_mutate_live_models_before_validation')
+
+tracks=mixed_fixture(); tracks.video.origin=tracks.audio.origin=Fraction(-3)
+tracks.video.select(0,True)
+before=tracks.snapshot()
+assert tracks.move_selection(1,-100)
+assert tracks.audio.clips[0].start==tracks.video.clips[0].start==-3
+tracks.undo(); assert tracks.snapshot()==before
+tracks=mixed_fixture(); before=tracks.snapshot()
+assert tracks.selected_length==tracks.audio.length(tracks.audio.clips[0])+tracks.audio.length(tracks.audio.clips[1])+tracks.video.length(tracks.video.clips[2])
+assert not tracks.can_join and not tracks.join()
+assert tracks.delete_selected() and not tracks.video.selected_ids and not tracks.audio.selected_ids
+assert len(tracks.video.clips)==3 and len(tracks.audio.clips)==3
+tracks.undo(); assert tracks.snapshot()==before
+tracks.activate('video',True)
+assert tracks.move_selection(4,14) and tracks.video.selected_ids=={4} and not tracks.audio.selected_ids
+tracks.select(0); tracks.activate('audio',True); tracks.select(0,True)
+assert tracks.mixed_selection
+tracks.select(0,True); assert tracks.lane=='video' and tracks.video.selected_ids=={0}
+passed('mixed_selection_origin_clamp_union_delete_undo_and_unselected_drag_remain_consistent')
 
 from PySide6.QtCore import QObject, QSettings, QUrl, Qt, QPointF, QPoint, QCoreApplication, QEvent, QLocale
 from PySide6.QtGui import QGuiApplication, QFontDatabase, QMouseEvent
@@ -235,22 +295,86 @@ try:
         assert bounds.x()>=0 and bounds.x()+control.width()<=window.width()+1,(name,bounds,control.width())
     assert label.width()>=label.implicitWidth(),(label.width(),label.implicitWidth())
     window.setWidth(1120); window.setHeight(790); QTest.qWait(50)
-    from splicelet.tracks import Tracks
     preview._clips=Tracks(model); preview._editing_changed(); wait(lambda:not preview.busy)
     box(xat(19),25,xat(41),55)
     assert preview.selectionCount==2 and preview._clips.video.selected_ids==model.selected_ids
     assert preview.selectedLengthText==preview.format_time(float(model.selected_length))
+    has_audio=preview._has_audio
+    preview._has_audio=False
+    assert abs(preview.moveTarget(3,60.2,.1,False)-60.2)<1e-6
+    preview._has_audio=has_audio
     preview.unlinkAudio(); wait(lambda:not preview.busy)
     preview.selectClip(1000004)
     video_before=preview._clips.video.clips.copy(); audio_before=preview._clips.audio.clips.copy()
     box(xat(19),25,xat(41),120)
     assert preview.selectionLane=='audio' and preview._clips.audio.selected_indices=={1,2}
-    assert not preview._clips.video.selected_ids
+    assert preview._clips.video.selected_indices=={1,2}
+    assert preview.selectionCount==4
     assert preview._clips.video.clips==video_before and preview._clips.audio.clips==audio_before
     preview.setDarkTheme(True); QTest.qWait(50)
     window.grabWindow().save(str(OUT/'selection-dark.png'))
     preview.setDarkTheme(False)
     passed('qml_rectangle_partial_hits_ctrl_toggle_reverse_clear_length_and_scissors')
+
+    tracks=preview._clips
+    click(1); click(1000002,Qt.KeyboardModifier.ControlModifier)
+    assert tracks.video.selected_indices=={1} and tracks.audio.selected_indices=={2}
+    assert preview.selectionCount==2 and not preview.canJoin
+    assert {c['index'] for c in preview.clips if c['selected']}=={1,1000002}
+    spec=preview.export_spec()
+    assert spec.start==float(tracks.video.project_start(tracks.video.clips[1]))
+    assert spec.end==float(tracks.audio.project_end(tracks.audio.clips[2]))
+    assert preview.selectedLengthText==preview.format_time(20)
+    start=float(tracks.video.project_start(tracks.video.clips[1]))
+    assert abs(preview.moveTarget(1,start+.2,.1,False)-start)<1e-6
+    # Clicking either selected lane for a drag must preserve the whole group.
+    for anchor in (1,1000002):
+        preview.movingClips(anchor)
+        before=tracks.snapshot(); history=len(tracks.undo_stack)
+        original={(lane,c.uid):c for lane,m in preview._lanes() for c in m.clips}
+        target=begin_drag(anchor,5)
+        assert timeline.property('dragIndex')==anchor
+        assert {'drag-preview-1','drag-preview-1000002'}.issubset({c.objectName() for c in timeline.childItems()})
+        assert item(1).opacity()==item(1000002).opacity()==.4
+        window.grabWindow().save(str(OUT/f'mixed-drag-{anchor}.png'))
+        end_drag(target)
+        delta=tracks.video.clips[1].start-original['video',1].start
+        assert abs(float(delta)-5)<.05
+        assert tracks.audio.clips[2].start-original['audio',2].start==delta
+        for lane,m in preview._lanes():
+            for c in m.clips:
+                assert c==replace(original[lane,c.uid],start=original[lane,c.uid].start+(delta if c.uid in m.selected_ids else 0))
+        assert len(tracks.undo_stack)==history+1 and not tracks.linked
+        after=tracks.snapshot(); preview.undoCut(); wait(lambda:not preview.busy)
+        assert tracks.snapshot()==before,(anchor,before,tracks.snapshot())
+        preview.redoCut(); wait(lambda:not preview.busy); assert tracks.snapshot()==after
+        preview.undoCut(); wait(lambda:not preview.busy)
+    click(1000002,Qt.KeyboardModifier.ControlModifier)
+    assert preview.selectionCount==1 and preview.selectionLane=='video' and preview.selectedClipName=='Shot 2'
+    click(1000002); assert not tracks.video.selected_ids and tracks.audio.selected_indices=={2}
+    box(xat(19),25,xat(41),120)
+    assert tracks.video.selected_indices==tracks.audio.selected_indices=={1,2}
+    raw=float(tracks.video.project_start(tracks.video.clips[1]))+.2
+    assert preview.moveTarget(1,raw,.1,False)==preview.moveTarget(1,raw,.1,True)
+    click(1000003,Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier)
+    assert tracks.video.selected_indices=={1,2} and tracks.audio.selected_indices=={1,2,3}
+    click(1000002,Qt.KeyboardModifier.ShiftModifier)
+    assert not tracks.video.selected_ids and tracks.audio.selected_indices=={1,2}
+    box(xat(19),25,xat(41),120)
+    box(xat(19),25,xat(29),120,Qt.KeyboardModifier.ControlModifier)
+    assert tracks.video.selected_indices==tracks.audio.selected_indices=={2}
+    box(xat(29),25,xat(19),120,Qt.KeyboardModifier.ControlModifier)
+    assert tracks.video.selected_indices==tracks.audio.selected_indices=={1,2}
+    assert preview.selectedLengthText==preview.format_time(20)
+    before=tracks.snapshot(); history=len(tracks.undo_stack)
+    preview.duplicateSelected(); preview.joinSelected()
+    assert tracks.snapshot()==before and len(tracks.undo_stack)==history
+    QTest.keyClick(window,Qt.Key.Key_Delete); wait(lambda:not preview.busy)
+    assert len(tracks.video.clips)==len(tracks.audio.clips)==3
+    assert len(tracks.undo_stack)==history+1
+    preview.undoCut(); wait(lambda:not preview.busy); assert tracks.snapshot()==before
+    window.grabWindow().save(str(OUT/'mixed-selection.png'))
+    passed('qml_mixed_ctrl_rectangle_drag_each_lane_export_bounds_delete_and_atomic_history')
 finally:
     preview.close(); engine.deleteLater(); QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
 (OUT/'report.json').write_text(json.dumps({'status':'pass','checks':checks},indent=2),encoding='utf-8')
