@@ -52,27 +52,43 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
 
 ## Versioning
 
-- Use `MAJOR.MINOR.PATCH` for the application version. Increment once per pending
-  set of application changes, not once per request or follow-up. Before changing
-  `__version__` in `splicelet/__init__.py`, inspect the version in HEAD, the working
-  tree and existing tags. If a pending version increment has neither been
-  committed nor tagged, keep that version for further changes and fixes, and
-  consolidate their CHANGELOG notes under the same version. A commit containing
-  the increment or a tag for that version establishes a new versioning baseline;
-  do not rewrite existing commits or tags to consolidate earlier increments.
-  Apply this rule to all three version components. Choose the increment from
-  the baseline according to the combined scope of the pending changes:
-  increment MINOR (the second number) for new functionality and reset PATCH to 0;
-  increment PATCH (the third number) for fixes without new functionality.
-  If a change includes both features and fixes, use a MINOR increment.
-  If the pending scope grows from fixes to new functionality, replace the pending
-  PATCH increment with a MINOR increment from the baseline, rather than adding
-  another increment. For example, from committed `1.3.0`, pending features use
-  `1.4.0`; follow-up fixes retain `1.4.0` until it is committed or tagged.
-- Propose a MAJOR increment (the first number) when warranted, explaining why,
-  but never apply it automatically; obtain the user's explicit agreement first.
-- Documentation-only, test-only and development-tooling-only changes do not
-  require an application version increment unless they change shipped behavior.
+- Use `MAJOR.MINOR.PATCH` for the application version, adding a suffix only when
+  explicitly requested by the user. Never change the version automatically,
+  whether changes are committed or uncommitted. Change `__version__` in
+  `splicelet/__init__.py` only when the user asks to create a new version or release.
+- An unqualified request to create a release targets the main branch and uses
+  the latest reachable stable tag `vMAJOR.MINOR.PATCH` as the comparison baseline;
+  ignore all suffixed tags. For a request with a suffix such as `-rc`, use the
+  latest reachable tag that is either stable or has that exact suffix, ignoring
+  other suffixes. Do not invent suffixes or suffix counters.
+- When creating a release, inspect the existing tags, the version in HEAD and
+  the working tree, and all commits and the cumulative diff since the applicable
+  baseline tag. Choose the increment from the combined changes since that tag,
+  not from the current version string or the latest commit alone. Increment
+  MINOR (the second number) for new functionality and reset PATCH to 0; increment
+  PATCH (the third number) for compatible fixes without new functionality.
+  If changes include both features and fixes, use a MINOR increment. For an
+  explicitly requested release containing only documentation, tests or development
+  tooling changes, use PATCH. If no applicable baseline tag exists, clarify the
+  initial version with the user instead of inventing release history.
+- Propose a MAJOR increment (the first number) for incompatible changes,
+  explaining why, but obtain the user's explicit agreement before applying it;
+  reset MINOR and PATCH to 0 when approved.
+- Assess incompatibility from the user's perspective. Changes to existing default
+  behavior (for example, the default export resolution) or new mandatory user
+  requirements warrant a MAJOR proposal. Requirements include external tools,
+  even when automatically installed: requiring network access to install them is
+  itself a new requirement. An optional capability does not introduce a mandatory
+  requirement if existing use remains available with the same defaults and
+  requirements. Adding a configuration parameter preserves compatibility only
+  when it is optional and leaving it unset preserves existing default behavior.
+  Internal implementation changes alone do not warrant MAJOR when user behavior
+  and requirements remain compatible. Apply these criteria before the MINOR/PATCH
+  rules; retain the existing approval requirements for changes affecting export.
+- As part of the requested release, update the version and CHANGELOG, commit
+  the release metadata and create the matching `vMAJOR.MINOR.PATCH` tag, including
+  exactly the suffix requested by the user, on the release commit. Never overwrite
+  an existing tag or rewrite existing commits to create a release.
 - Avoid duplicating the current version in introductory/design documentation.
   Keep any current-version references consistent with the application version;
   preserve clearly identified historical release records.
@@ -99,8 +115,9 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
 - Update docs/DEVELOPMENT for environment, build or verification changes, including
   commands, fixture requirements and known validation limitations. Distinguish
   maintained synthetic checks from optional real-media and historical probes.
-- For each application version increment, add a concise CHANGELOG entry grouped
-  by Added/Changed/Fixed as applicable. Consolidate changes within the same version.
+- Keep pending release notes under Unreleased without changing the application
+  version. When the user requests a release, consolidate the relevant notes into
+  a concise entry for that version, grouped by Added/Changed/Fixed as applicable.
   Record only verifiable history; do not infer missing versions or label untagged
   work as a published release. Use Unreleased for relevant pending release notes,
   including documentation-only changes that do not increment the application.

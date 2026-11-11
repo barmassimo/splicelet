@@ -8,9 +8,13 @@ independent of each other and of the public Git history.
 
 ### Development
 
-- Consolidate follow-up changes under the same pending application version until
-  its increment is committed or tagged; select the increment from the combined
-  scope of the pending changes.
+- Change application versions only when explicitly asked to create a release;
+  choose the increment from commits and cumulative changes since the latest
+  applicable stable or matching-suffix tag, then tag the release. MAJOR increments
+  continue to require explicit confirmation.
+- Define MAJOR compatibility from the user's perspective, including changes to
+  default behavior and new mandatory requirements. Optional configuration
+  parameters preserve compatibility when existing defaults remain unchanged.
 
 ## 1.7.1 — Unreleased
 
