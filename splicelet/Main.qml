@@ -369,7 +369,7 @@ ApplicationWindow {
         ColumnLayout {
             width: parent.width
             spacing: 12
-            Label { objectName: "applicationVersionLabel"; text: "Splicelet " + Qt.application.version; font.pixelSize: 26; font.weight: Font.DemiBold }
+            Label { objectName: "applicationVersionLabel"; text: "Splicelet " + Qt.application.version; font.pixelSize: 26; font.weight: Font.DemiBold; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Label { text: "Small cuts. Precise stories."; color: theme.muted }
             Label { text: "A local video editor for Windows. Trim, arrange and export with frame-accurate control."; wrapMode: Text.WordWrap; Layout.fillWidth: true }
             Label { text: "Built with Python, Qt Quick, PyAV, NumPy and FFmpeg.\nYour original sources stay untouched."; wrapMode: Text.WordWrap; Layout.fillWidth: true; font.pixelSize: 12; color: theme.muted }

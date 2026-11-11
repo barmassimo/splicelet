@@ -23,6 +23,10 @@ with the usual save/discard/cancel prompt for unsaved changes.
 Authored UI text is English; native file dialogs follow Windows language settings.
 Numeric fields require a decimal point, such as `6.25`.
 
+**Help > About...** shows the application version and, when available, a short
+Git commit ID. `modified` means the build included local changes beyond that
+commit. Portable copies retain the identity recorded when they were built.
+
 | Command | Shortcut |
 |---|---|
 | Open project | Ctrl+O |

@@ -6,6 +6,12 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+### Added
+
+- Show the Git commit and local modification state in About, CLI version output,
+  startup logs and textual Windows executable metadata when available. Portable
+  builds retain their build-time identity without requiring Git.
+
 ### Fixed
 
 - Accept file imports by drag and drop throughout the workspace, including the

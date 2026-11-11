@@ -23,6 +23,7 @@ env = os.environ.copy()
 env['PATH'] = os.pathsep.join([str(runtime),str(runtime/'Library'/'bin'),str(runtime/'Scripts'),env.get('PATH','')])
 env['CONDA_PREFIX'] = str(runtime)
 commands = [
+    ('build_info',['scripts/probe_build_info.py']),
     ('synthetic-source',['scripts/probe_source.py','--ffmpeg',str(runtime/'Library/bin/ffmpeg.exe'),
                          '--ffprobe',str(runtime/'Library/bin/ffprobe.exe')]),
     ('smoke',['-m','splicelet',str(fixture),'--smoke-test']),

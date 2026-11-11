@@ -68,6 +68,14 @@ assets from `splicelet/assets/splicelet.svg` using Qt under `artifacts/icon`.
 `scripts/Splicelet.spec` derives Windows version metadata from the application
 version source; there is no separate manual version field to maintain.
 
+Builds also capture the current Git commit and whether tracked or untracked
+non-ignored files differ from it. About, `python -m splicelet --version`, startup
+logs and textual Windows version fields show this identity; the application
+version and numeric executable version fields remain unchanged. Portable builds
+bundle the snapshot and need no Git installation at runtime. Missing Git or
+repository metadata falls back to the application version alone. The `modified`
+marker identifies a local change state, not the exact content of those changes.
+
 Output is `artifacts/portable/Splicelet/Splicelet.exe`. Keep the **entire Splicelet
 folder** together, with `_internal` beside the executable. Run from a writable location, since cache,
 logs and smoke outputs go into `artifacts` beside the executable. Source media
@@ -107,7 +115,7 @@ After bootstrap, run the maintained suite with one command:
 powershell -NoProfile -File scripts/run-tests.ps1
 ```
 
-This runs 19 isolated processes sequentially, including source feasibility,
+This runs 20 isolated processes sequentially, including build identity, source feasibility,
 application smoke, all maintained focused probes and source/proxy checks. No
 private recordings or media downloads are required. Each process has a timeout;
 failures are recorded without skipping later checks. Logs and an aggregate report
@@ -148,6 +156,7 @@ integration fixture. Report paths are relative to `artifacts/`.
 
 | Script under `scripts/` | Coverage | Report |
 |---|---|---|
+| `probe_build_info.py` | Clean/modified Git identity, missing Git/repository fallback and portable snapshot loading without Git | `build-info-tests/report.json` |
 | `probe_timeline_edits.py` | Gaps, mapping, joins, reserves, duplication and history | `timeline-tests/report.json` |
 | `probe_clip_effects.py` | PCM/video fades, seeks, joins and preservation | `effects-tests/report.json` |
 | `probe_audio_tracks.py` | Independent lanes, mapping, gestures and persistence | `audio-track-tests/report.json` |

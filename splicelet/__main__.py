@@ -3,13 +3,17 @@ import os
 from pathlib import Path
 import sys
 from . import __version__
+from .build_info import current_build_info, version_label
+
+application_version = version_label(__version__,current_build_info())
 
 parser = argparse.ArgumentParser(description='Splicelet local video editor')
-parser.add_argument('--version', action='version', version=f'Splicelet {__version__}')
+parser.add_argument('--version', action='version', version=f'Splicelet {application_version}')
 parser.add_argument('file', nargs='?')
 parser.add_argument('--smoke-test', action='store_true')
 parser.add_argument('--muted', action='store_true')
 args = parser.parse_args()
+print(f'Starting Splicelet {application_version}',flush=True)
 if args.smoke_test:
     os.environ.setdefault('QT_QPA_PLATFORM','offscreen')
     os.environ.setdefault('QT_QUICK_BACKEND','software')
@@ -36,7 +40,7 @@ if sys.platform == 'win32' and not QFontDatabase.families():
         if (font_dir/font_name).exists():
             QFontDatabase.addApplicationFont(str(font_dir/font_name))
 app.setApplicationName('Splicelet')
-app.setApplicationVersion(__version__)
+app.setApplicationVersion(application_version)
 app.setOrganizationName('Splicelet')
 icon = Path(__file__).with_name('assets')/('splicelet.png' if getattr(sys,'frozen',False) else 'splicelet.svg')
 app.setWindowIcon(QIcon(str(icon)))

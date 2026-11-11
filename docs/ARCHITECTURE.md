@@ -236,7 +236,14 @@ to the saved state clears dirty state. History/playhead/viewport are not persist
 QSettings stores recent projects and appearance per user.
 
 `splicelet/__init__.py` is the application version source for CLI, About, Qt and
-Windows executable metadata. Development launchers use the repository-local
+Windows executable metadata. `build_info.py` adds an optional Git commit and
+`modified` marker to the displayed version without changing `__version__` or
+numeric Windows version fields. Source startup detects Git with bounded subprocess
+timeouts before creating Qt; missing Git/repository metadata leaves the base
+version. PyInstaller captures the identity in a bundled `_build_info.json`;
+frozen startup only reads that snapshot, never Git or a nearby checkout. The
+displayed identity also appears in startup logs and textual Windows version fields.
+Development launchers use the repository-local
 Conda prefix. Frozen builds bundle QML, runtime dependencies and external FFmpeg;
 their writable artifacts directory is beside the executable. Windows startup sets
 the taskbar identity `Splicelet.Splicelet` before constructing the application.

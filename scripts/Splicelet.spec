@@ -1,5 +1,6 @@
 # Build from the project-local Conda runtime with scripts/build-portable.ps1.
 from pathlib import Path
+import json
 import runpy
 import sys
 from PyInstaller.utils.win32.versioninfo import (
@@ -10,6 +11,12 @@ from PyInstaller.utils.win32.versioninfo import (
 root = Path(SPECPATH).parent
 runtime = Path(sys.prefix)
 version = runpy.run_path(str(root/'splicelet'/'__init__.py'))['__version__']
+build_helpers = runpy.run_path(str(root/'splicelet'/'build_info.py'))
+build_info = build_helpers['git_build_info'](root)
+display_version = build_helpers['version_label'](version,build_info)
+build_info_path = root/'artifacts'/'pyinstaller'/'_build_info.json'
+build_info_path.parent.mkdir(parents=True,exist_ok=True)
+build_info_path.write_text(json.dumps(build_info,indent=2)+'\n',encoding='utf-8')
 windows_version = (*map(int,version.split('.')),0)
 version_info = VSVersionInfo(
     ffi=FixedFileInfo(filevers=windows_version,prodvers=windows_version,
@@ -17,11 +24,11 @@ version_info = VSVersionInfo(
     kids=[
         StringFileInfo([StringTable('040904B0',[
             StringStruct('FileDescription','Splicelet video editor'),
-            StringStruct('FileVersion',version),
+            StringStruct('FileVersion',display_version),
             StringStruct('InternalName','Splicelet'),
             StringStruct('OriginalFilename','Splicelet.exe'),
             StringStruct('ProductName','Splicelet'),
-            StringStruct('ProductVersion',version),
+            StringStruct('ProductVersion',display_version),
         ])]),
         VarFileInfo([VarStruct('Translation',[1033,1200])]),
     ],
@@ -32,7 +39,8 @@ a = Analysis(
     [str(root/'scripts'/'portable_entry.py')],
     pathex=[str(root)],
     binaries=[(str(runtime/'Library'/'bin'/'ffmpeg.exe'),'ffmpeg')],
-    datas=qml+[(str(root/'artifacts'/'icon'/'splicelet.png'),'splicelet/assets')],
+    datas=qml+[(str(root/'artifacts'/'icon'/'splicelet.png'),'splicelet/assets'),
+               (str(build_info_path),'splicelet')],
     hiddenimports=[],
     hookspath=[],
     runtime_hooks=[],
