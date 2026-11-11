@@ -16,9 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT))
 import av
 import numpy as np
-from PySide6.QtCore import QUrl,Qt,QPointF,QPoint,QCoreApplication,QEvent,QSettings,QLocale,QObject,QMetaObject
-from PySide6.QtGui import QGuiApplication,QFontDatabase,QMouseEvent
-from PySide6.QtQml import QQmlApplicationEngine,QQmlExpression
+from PySide6.QtCore import QUrl,Qt,QPointF,QPoint,QCoreApplication,QEvent,QSettings,QLocale,QObject,QMetaObject,QMimeData
+from PySide6.QtGui import QGuiApplication,QFontDatabase,QMouseEvent,QDragEnterEvent,QDragMoveEvent,QDropEvent
+from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtQuickControls2 import QQuickStyle
 from PySide6.QtTest import QTest
@@ -105,9 +105,28 @@ def export(spec,name):
     return destination
 
 try:
-    engine.rootContext().setContextProperty('testSourceUrls',[QUrl.fromLocalFile(str(p)) for p in (red,blue,audio,silent)])
-    expression = QQmlExpression(engine.rootContext(),window,'preview.importUrls(testSourceUrls)')
-    expression.evaluate(); assert not expression.hasError(),expression.error().toString()
+    QTest.qWait(100)
+    screen = item_named('previewImage')
+    timeline = item_named('editTimeline')
+    tabs = item_named('sidePanelTabs')
+    targets = [screen.mapToScene(QPointF(10,10)).toPoint(),
+               screen.mapToScene(QPointF(screen.width()/2,screen.height()/2)).toPoint(),
+               timeline.mapToScene(QPointF(timeline.width()/2,55)).toPoint(),
+               tabs.mapToScene(QPointF(50,80)).toPoint()]
+    for count,(source_file,target) in enumerate(zip((red,blue,audio,silent),targets),1):
+        mime = QMimeData(); mime.setUrls([QUrl.fromLocalFile(str(source_file))])
+        actions = Qt.DropAction.CopyAction | Qt.DropAction.MoveAction
+        enter = QDragEnterEvent(target,actions,mime,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(window,enter)
+        assert enter.isAccepted(),('File drag rejected',target)
+        move = QDragMoveEvent(target,actions,mime,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(window,move)
+        assert move.isAccepted(),('File drag move rejected',target)
+        drop = QDropEvent(QPointF(target),actions,mime,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier)
+        QCoreApplication.sendEvent(window,drop)
+        assert drop.isAccepted() and drop.dropAction()==Qt.DropAction.CopyAction
+        wait(lambda:len(preview._sources)==count); idle()
+    passed('external_file_drops_preview_timeline_flac_and_side_panel_copy_only')
     wait(lambda:len(preview._sources)==4); idle()
     assert not errors,errors
     assert preview.duration==2 and (preview._width,preview._height)==(320,180)

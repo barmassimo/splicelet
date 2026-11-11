@@ -837,10 +837,6 @@ ApplicationWindow {
                 Label { anchors.horizontalCenter: parent.horizontalCenter; text: "A video, a precise position."; font.pixelSize: 24; color: theme.text }
                 Label { anchors.horizontalCenter: parent.horizontalCenter; text: "Drop video or audio here, or choose Import sources"; color: theme.muted }
             }
-            DropArea {
-                anchors.fill: parent
-                onDropped: function(drop) { if (drop.hasUrls && drop.urls.length && !preview.exporting && !preview.busy) { preview.importUrls(drop.urls); sourceTabs.currentIndex=1; drop.acceptProposedAction() } }
-            }
             MouseArea {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton
@@ -982,6 +978,24 @@ ApplicationWindow {
                     Label { visible: preview.exporting; text: Math.round(preview.exportProgress*100)+" %"; color: theme.muted; font.pixelSize: 11 }
                     SpliceletButton { visible: preview.exporting; text: "Cancel"; implicitHeight: 24; padding: 3; onClicked: preview.cancelExport() }
                 }
+            }
+        }
+    }
+    DropArea {
+        objectName: "fileImportDropArea"
+        anchors.fill: parent
+        anchors.topMargin: root.fullScreen ? 0 : titleBar.height
+        z: 90
+        keys: ["text/uri-list"]
+        enabled: !preview.exporting && !preview.busy
+        onEntered: function(drag) { drag.accepted = drag.hasUrls && drag.urls.length>0 && (drag.supportedActions & Qt.CopyAction)!==0 }
+        onDropped: function(drop) {
+            if (drop.hasUrls && drop.urls.length && !preview.exporting && !preview.busy) {
+                properties.finishEditing()
+                appMenu.close()
+                preview.importUrls(drop.urls)
+                sourceTabs.currentIndex=1
+                drop.accept(Qt.CopyAction)
             }
         }
     }

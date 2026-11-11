@@ -6,6 +6,11 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+### Fixed
+
+- Accept file imports by drag and drop throughout the workspace, including the
+  side panel and timeline, with consistent copy feedback and unchanged originals.
+
 ### Development
 
 - Change application versions only when explicitly asked to create a release;

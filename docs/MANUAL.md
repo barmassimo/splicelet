@@ -45,7 +45,9 @@ selection, playhead, zoom and undo history are not saved. There is no autosave.
 ## Import and place sources
 
 Use **File > Import sources...**, the Sources **Import** button, or drop files
-onto the preview. Multiple video/audio files are indexed in the background in
+onto the preview, Sources/Properties panel, or timeline. Dropping files imports
+them; it does not place them at the timeline drop position. Multiple video/audio
+files are indexed in the background in
 the supplied order. The first source is placed automatically; later sources
 enter the library without replacing the montage. Unsupported imports report an
 error while preserving existing clips.
