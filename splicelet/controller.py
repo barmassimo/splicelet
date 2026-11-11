@@ -166,7 +166,7 @@ class Preview(QObject):
             self.sink.setVolume(0. if muted else self._volume)
         self._io = None
         self.video = Decoder('video',realtime=True)
-        self.audio = Decoder('audio', sample_format='flt' if self._format.sampleFormat()==QAudioFormat.SampleFormat.Float else 's16', bytes_per_sample=self._format.bytesPerSample())
+        self.audio = Decoder('audio', sample_format='flt' if self._format.sampleFormat()==QAudioFormat.SampleFormat.Float else 's16', bytes_per_sample=self._format.bytesPerSample(), realtime=True)
         self.indexed.connect(self._receive_index,Qt.ConnectionType.QueuedConnection)
         self.sourceIndexed.connect(self._receive_source,Qt.ConnectionType.QueuedConnection)
         self.timer = QTimer(self)

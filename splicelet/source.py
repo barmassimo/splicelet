@@ -451,6 +451,7 @@ class Decoder:
 
     def _mix_audio(self,job):
         """Mix bounded float PCM blocks; quantize int16 once after summing."""
+        if self.realtime: return self._buffered_audio(job)
         rate = self.rate
         spans = {s.clip_id:s for s in job.effects}
         cursor,limit = round(job.position*rate),round(job.duration*rate)
@@ -497,6 +498,70 @@ class Decoder:
                 for _,child in children: child.close()
                 for _,child in children: child.thread.join(timeout=2)
             if self.stale(job): return
+
+    def _buffered_audio(self,job):
+        """Keep continuous readers and prebuffer the next part, at most two."""
+        rate = self.rate
+        spans = {s.clip_id:s for s in job.effects}
+        cursor,limit = round(job.position*rate),round(job.duration*rate)
+        children = {}
+        # A part can share its clip ID with other noncontiguous source pieces.
+        upcoming = iter(sorted((p for p in job.parts if round(p.end*rate)>cursor and round(p.start*rate)<limit),key=lambda p:p.start))
+        def prepare():
+            for key,(part,child) in tuple(children.items()):
+                if round(part.end*rate)<=cursor:
+                    child.close(); child.thread.join(timeout=2)
+                    del children[key]
+            while len(children)<2:
+                part = next(upcoming,None)
+                if part is None: break
+                begin = max(cursor,round(part.start*rate))
+                finish = min(limit,round(part.end*rate))
+                if finish<=begin: continue
+                source = part.source_start+(begin-round(part.start*rate))/rate
+                child = Decoder('audio',rate,'flt',4)
+                children[id(part)] = (part,child)
+                child.request(1,replace(part_job(job,part),generation=1,position=source,duration=source+(finish-begin)/rate,effects=(),parts=None))
+        try:
+            for start,end,active in intervals(job.parts,job.duration):
+                finish = min(limit,round(end*rate))
+                if finish<=cursor: continue
+                if self.stale(job): return
+                prepare()
+                while cursor<finish and not self.stale(job):
+                    count = min(4096,finish-cursor)
+                    mixed = np.zeros((count,2),dtype=np.float64)
+                    for part in active:
+                        child = children[id(part)][1]
+                        data = bytearray()
+                        while len(data)<count*8 and not self.stale(job):
+                            chunk = child.take_audio(count*8-len(data))
+                            data.extend(chunk)
+                            queued,_,eof,error = child.status()
+                            if error: raise RuntimeError(error)
+                            if eof and not queued: break
+                            if not chunk:
+                                with self.condition: self.condition.wait(.003)
+                        if self.stale(job): return
+                        data.extend(bytes(count*8-len(data)))
+                        span = spans[part.clip_id]
+                        faded = audio_fades(data,cursor,rate,'flt',(span,))
+                        positions = np.arange(cursor,cursor+count,dtype=np.int64)
+                        gains = np.ones(count,dtype=np.float64)
+                        if span.cross_in:
+                            gains *= np.clip((positions-round(span.start*rate))/max(1,round((span.start+span.cross_in)*rate)-round(span.start*rate)),0,1)
+                        if span.cross_out:
+                            gains *= np.clip((round(span.end*rate)-positions)/max(1,round(span.end*rate)-round((span.end-span.cross_out)*rate)),0,1)
+                        mixed += np.frombuffer(faded,dtype='<f4').reshape(-1,2)*gains[:,None]
+                    if self.sample_format=='s16':
+                        data = np.clip(np.rint(mixed*32768),-32768,32767).astype('<i2').tobytes()
+                    else: data = mixed.astype('<f4').tobytes()
+                    if not self.put(job,data): return
+                    cursor += count
+                if self.stale(job): return
+        finally:
+            for _,child in children.values(): child.close()
+            for _,child in children.values(): child.thread.join(timeout=2)
 
 
 def inspect_and_index(path, cancelled, publish):

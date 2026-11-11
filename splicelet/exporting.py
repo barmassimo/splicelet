@@ -100,6 +100,27 @@ def input_paths(spec,parts):
 def source_paths(spec): return tuple(s.path for s in spec.sources) or (spec.source,)
 
 
+def video_input_window(spec,part=None):
+    """Bound demuxing, leaving exact PTS selection to the existing filters."""
+    local,p = piece_context(spec,part) if part is not None else (spec,None)
+    if part is None:
+        first,last = spec.start_pts*spec.time_base,spec.end_pts*spec.time_base
+    else:
+        target = Fraction(str(part.source_start+local.origin+max(0.,spec.start-part.start)))
+        first = target
+        if local.source_pts:
+            frame = max(p.first_frame,min(p.end_frame-1,bisect_right(local.source_pts,target/local.time_base)-1))
+            first = local.source_pts[frame]*local.time_base
+        last = Fraction(str(part.source_end+local.origin))
+    # Accurate input seeking uses a container-relative offset. copyts retains
+    # absolute source PTS for the filters, including nonzero container origins.
+    with av.open(local.source) as container:
+        origin = Fraction(container.start_time or 0,av.time_base)
+    if first<origin: return []
+    start = math.floor(first-origin)
+    return ['-ss',str(start),'-t',str(max(1,math.ceil(last-origin)+1-start))]
+
+
 def track_video_graph(spec):
     """Compose source PTS and black gaps on the project clock before windowing."""
     if any(s.cross_in or s.cross_out for s in spec.video_effects):
@@ -306,9 +327,12 @@ class ExportTask(QObject):
             visible = [p for p in spec.parts if p.end>spec.start+.000001 and p.start<spec.end-.000001] if spec.parts is not None else []
             paths = input_paths(spec,visible) if spec.video_effects is not None else [spec.source]*input_count
             if not paths: paths = [spec.source]
-            for path in paths:
+            input_parts = visible if spec.video_effects is not None else spec.parts or ()
+            for i,path in enumerate(paths):
                 command += ['-threads','1']
                 if spec.sources: command += ['-noautorotate']
+                part = input_parts[i] if i<len(input_parts) else None
+                command += video_input_window(spec,part)
                 command += ['-i',path]
             if crossfades:
                 command += ['-threads','1','-i',str(transition_path)]

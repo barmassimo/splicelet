@@ -87,7 +87,7 @@ try:
     assert window.findChild(QQuickItem,'addStartSpaceButton') is None and window.findChild(QQuickItem,'addEndSpaceButton') is None
     assert not start.property('shortcut') and not end.property('shortcut')
     menu=window.findChild(QObject,'editMenu')
-    assert menu.property('count')==6
+    assert menu.property('count')==10
     QMetaObject.invokeMethod(menu,'open'); QTest.qWait(100)
     window.grabWindow().save(str(OUT/'edit-space-menu.png'))
     QMetaObject.invokeMethod(menu,'close'); QTest.qWait(100)

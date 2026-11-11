@@ -118,8 +118,16 @@ Video converts on CPU to RGB/QImage and displays through a Qt Quick image provid
 There is no implemented hardware decoding, zero-copy texture or GPU compositor.
 Overlap composition merges actual PTS from both sources, including a held frame
 at an off-grid boundary; it uses at most two readers with one lookahead each.
-Audio mixes bounded 4096-sample float blocks from at most two child decoders;
-int16 fallback is quantized after mixing. Manual video fades apply within overlap
+Audio mixes bounded 4096-sample float blocks from at most two child decoders.
+In preview, each reader spans its retained source part continuously across
+overlap edges; the spare reader slot prebuffers the next contribution before it
+becomes active.
+Per-reader queues retain the same backpressure and all readers close on stale
+jobs, cancellation or errors. Offline audio keeps the existing per-interval reader
+lifecycle, preserving resampler initialization and exported PCM. Both paths use
+the same source ranges, sample anchors and fade clocks; preview resampler history
+can differ at internal boundaries for resampled/compressed sources.
+Int16 fallback is quantized after mixing. Manual video fades apply within overlap
 composition; QML opacity is unity there. Fade edits invalidate cached composites.
 
 After buffering, playback follows `QAudioSink.processedUSecs()`, with wall-clock
@@ -163,6 +171,15 @@ mapping/envelopes prepare temporary float PCM. Non-overlap video uses source PTS
 overlap intervals use the shared compositor and temporary lossless RGB FFV1/NUT.
 FFmpeg interleaves these with black gaps on the project clock and preserves fade
 phase when exporting a partial window.
+
+Each original video input seeks before its first required indexed PTS, including
+the frame covering a partial/VFR left edge, and bounds demuxing to its retained
+source range with outward-rounded slack. Input seeking uses container-relative
+offsets while `copyts` preserves absolute source timestamps; FFmpeg decodes
+keyframe preroll and the existing trim
+and timestamp filters remain responsible for exact output selection. This avoids
+decoding an entire recording before a late cut or reading its unused tail.
+Ranges preceding the reported container origin retain unbounded input reads.
 
 One final lossy encode produces H.264 CRF 18 / veryfast / yuv420p and stereo 48 kHz
 AAC 320 kbit/s. Optional export-only sample-peak normalization measures bounded

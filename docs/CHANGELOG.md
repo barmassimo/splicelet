@@ -12,6 +12,18 @@ independent of each other and of the public Git history.
   its increment is committed or tagged; select the increment from the combined
   scope of the pending changes.
 
+## 1.7.1 — Unreleased
+
+### Fixed
+
+- Seek export inputs to the retained source frames and bound their read duration,
+  avoiding full-source decoding before late cuts in long recordings. Preserve
+  source PTS, held VFR frames and existing encoding settings.
+- Keep continuous preview audio readers across overlap boundaries and prebuffer the next
+  contribution, avoiding repeated source seeks at internal transitions, including
+  joined clips. Keep at most two bounded child decoders and retain the existing
+  offline audio rendering path.
+
 ## 1.7.0 — Unreleased
 
 ### Added

@@ -109,6 +109,40 @@ assert np.array_equal(sought,pcm[60000:120000])
 integer = read('audio',job('audio'),'s16')
 assert np.max(abs(integer.astype(float)-np.rint(pcm*32768)))<=1
 passed('sample_exact_linear_stereo_mix_seek_phase_and_int16')
+
+# Simulate a costly seek. Both sources must be ready before consuming the
+# overlap, and a continuing source must not seek again when the overlap ends.
+original_audio = Decoder._audio
+started = []
+ready = threading.Event()
+def slow_audio(self,child_job):
+    if child_job.parts is None:
+        started.append(child_job.position)
+        time.sleep(.25)
+        if len(started)>=2: ready.set()
+    return original_audio(self,child_job)
+worker = Decoder('audio',realtime=True)
+chunks = []
+try:
+    with patch.object(Decoder,'_audio',slow_audio):
+        worker.request(1,job('audio'))
+        assert ready.wait(5),'Incoming source was not prepared before the overlap'
+        deadline = time.monotonic()+10
+        while True:
+            chunk = worker.take_audio(32768)
+            if chunk: chunks.append(chunk)
+            count,_,eof,error = worker.status()
+            assert not error,error
+            if eof and not count: break
+            assert time.monotonic()<deadline
+            time.sleep(.001)
+    assert len(started)==2,started
+    assert np.array_equal(np.frombuffer(b''.join(chunks),dtype='<f4').reshape(-1,2),pcm)
+    assert np.array_equal(read('audio',job('audio',1.25,2.5),realtime=True),pcm[60000:120000])
+    assert np.max(abs(read('audio',job('audio'),'s16',realtime=True).astype(float)-np.rint(pcm*32768)))<=1
+finally:
+    worker.close(); worker.thread.join(3)
+passed('slow_source_seeks_are_prebuffered_and_continuous_across_both_overlap_edges')
 frames = read('video',job())
 assert len(frames)==90,len(frames)
 assert all(a[1]<b[1] for a,b in zip(frames,frames[1:]))
@@ -282,6 +316,7 @@ chain.clips = [Clip(0,Fraction(0),((0,60),)),Clip(1,Fraction(1),((60,120),)),Cli
 chain.extent = Fraction(9,2); chain.next_id = 3
 chain_job = replace(job('audio'),duration=4.5,parts=chain.parts(),effects=chain.effect_spans())
 chain_pcm = read('audio',chain_job)
+assert np.array_equal(read('audio',chain_job,realtime=True),chain_pcm)
 chain.select(0); chain.select(1,True); assert chain.join()
 assert not chain.move(1,1.5)  # Still reject a triple overlap hidden inside a group.
 chain.select(0); chain.select(1,True); assert chain.join()
@@ -339,8 +374,8 @@ assert [f[1] for f in vjoined]==[f[1] for f in mixed_frames]
 assert all(np.array_equal(rgb(a[2]),rgb(b[2])) for a,b in zip(vjoined,mixed_frames))
 passed('compound_join_preserves_vfr_pts_and_off_grid_transition_frame_holds')
 
-for kind in ('audio','video'):
-    worker = Decoder(kind)
+for kind,realtime in (('audio',False),('audio',True),('video',False)):
+    worker = Decoder(kind,realtime=realtime)
     try:
         worker.request(1,job('audio' if kind=='audio' else 'video'))
         time.sleep(.05)
