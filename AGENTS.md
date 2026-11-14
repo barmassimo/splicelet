@@ -22,6 +22,14 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
   English. Use `.` for decimals regardless of Windows locale.
 - Keep the interface light, minimal and responsive. The timeline itself holds
   selection and editing interactions; do not add a separate clip toolbar.
+- Maintain an application icon and use it for the application window and
+  distributions; create one if it is missing.
+- Warn the user before implementing requested changes expected to have a
+  significant impact on performance. Explain the potential impact and distinguish
+  estimates from measured results.
+- Verify downloaded files against expected SHA-256 hashes from official sources
+  before extracting, executing or using them. Record the source and expected hash;
+  fail clearly on mismatches.
 - Original sources must remain untouched under every operation. Never overwrite
   existing export destinations or source aliases. Preserve export cancellation,
   destination race protection and validated temporary-directory cleanup.
@@ -95,6 +103,42 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
   Qt, About, CLI and executable metadata must continue to derive their version
   from `splicelet/__init__.py`. Project file format versions are independent:
   do not increment them merely because the application version changes.
+
+## Build identity and repository link
+
+- Show the application version together with the short source Git commit and
+  `modified` marker when applicable in About, CLI version output, startup logs
+  and textual executable metadata. Retain the full commit hash in build metadata.
+- Capture the commit and modification state from the project's repository at
+  build time. Mark `modified` for staged or unstaged tracked changes or non-ignored
+  untracked files. Ignored tools, environments, caches and generated distributions
+  must not make a build appear modified. Capture identity before generating build
+  metadata so metadata generation does not itself cause a dirty state.
+- `modified` identifies local changes beyond the commit, not their exact contents.
+  It is build provenance, not an application version suffix, and must not change
+  `__version__` or numeric executable version fields.
+- Build releases after committing and tagging, with a clean working tree, so
+  release distributions do not display `modified`.
+- Regenerate the identity snapshot for every portable build. If Git or the
+  project's repository identity is unavailable at build time, replace any previous
+  snapshot with unavailable identity and display only the application version.
+  Never reuse a stale hash or invent a commit or clean state.
+- Bundle the captured identity with distributions. A build made with verified
+  identity retains it when run outside the repository. Portable startup must only
+  read that snapshot; it must not require Git, a checkout or network access, or
+  inspect an unrelated repository on the user's machine. Missing or invalid
+  snapshots fall back to the application version alone.
+- Source launches inspect only the application's project repository and fall back
+  to the application version alone if Git or repository metadata is unavailable.
+- Verify that distributions retain their captured identity outside the checkout
+  before claiming this is supported.
+- When a repository remote is available, ask the user before making the displayed
+  version clickable or including the repository URL in distributions, because the
+  repository may be private. The presence of a remote alone is not authorization.
+  If approved, link to the repository root, not a specific commit, tag or release.
+  Capture the verified repository URL at build time; do not invent a URL when no
+  remote is available. Opening the link is optional; application use remains offline.
+  This rule does not itself authorize implementing the link.
 
 ## Documentation maintenance
 
