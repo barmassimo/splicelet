@@ -115,7 +115,7 @@ After bootstrap, run the maintained suite with one command:
 powershell -NoProfile -File scripts/run-tests.ps1
 ```
 
-This runs 20 isolated processes sequentially, including build identity, source feasibility,
+This runs 21 isolated processes sequentially, including build identity, source feasibility,
 application smoke, all maintained focused probes and source/proxy checks. No
 private recordings or media downloads are required. Each process has a timeout;
 failures are recorded without skipping later checks. Logs and an aggregate report
@@ -167,6 +167,7 @@ integration fixture. Report paths are relative to `artifacts/`.
 | `probe_export_options.py` | Export scope/defaults, normalization, AAC references and cancellation | `export-option-tests/report.json` |
 | `probe_export_seeks.py` | Late/reordered cuts, overlaps, partial windows, single-frame/irregular-tail exports, long VFR holds and fractional container origins; exact decoded audio/video equality against unbounded input reads | `export-seek-tests/report.json` |
 | `probe_playhead_clock.py` | Delayed/absent video, transport clock, displayed-frame fades and paused seeks | `playhead-clock-tests/report.json` |
+| `probe_audio_meter.py` | Stereo sample peaks, float/int16 and partial writes, unchanged device bytes, mute/zero-volume activity, bounded queue and light/dark compact layouts | `audio-meter-tests/report.json` |
 
 The synthetic source checks are included in the full suite and can also run alone:
 

@@ -29,7 +29,7 @@ commands = [
     ('smoke',['-m','splicelet',str(fixture),'--smoke-test']),
 ]
 commands.extend((name.removeprefix('probe_'),[f'scripts/{name}.py']) for name in (
-    'probe_appearance','probe_audio_tracks','probe_clip_effects','probe_clip_export',
+    'probe_appearance','probe_audio_meter','probe_audio_tracks','probe_clip_effects','probe_clip_export',
     'probe_crossfades','probe_edge_space','probe_export_options','probe_export_seeks','probe_group_edits',
     'probe_layout','probe_multi_source','probe_playhead_clock','probe_projects',
     'probe_splicelet_audio','probe_timeline_edits','probe_timeline_visuals','probe_real_source'))

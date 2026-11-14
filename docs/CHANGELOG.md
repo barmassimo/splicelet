@@ -8,6 +8,8 @@ independent of each other and of the public Git history.
 
 ### Added
 
+- Add a compact horizontal stereo peak meter beside listening volume, measured
+  before listening gain, with brief peak holds and active gray bars while muted.
 - Show the Git commit and local modification state in About, CLI version output,
   startup logs and textual Windows executable metadata when available. Portable
   builds retain their build-time identity without requiring Git.

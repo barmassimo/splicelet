@@ -96,6 +96,13 @@ The speaker mutes without forgetting its level. Listening volume ranges from
 **0–200%**, initially **100%**, marked by a red tick. Above 100% can distort
 loud material. Listening volume and mute do not affect exports or project data.
 
+The compact L/R meter to the right of listening volume shows approximate stereo
+sample peaks from −60 to 0 dBFS, including timeline fades and overlaps, before
+listening volume. Peak markers hold briefly. Muting or setting listening volume
+to zero turns the bars gray while they continue following the audio. Pausing or
+seeking clears them. The meter requires an available audio output and does not
+predict export normalization or encoded/true peaks.
+
 ## Selection and editing
 
 Click a clip to select without seeking. **Ctrl+click** toggles individual clips.

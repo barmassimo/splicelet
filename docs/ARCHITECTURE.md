@@ -153,6 +153,14 @@ up to 100% uses sink attenuation; above 100% applies NumPy gain/saturation to
 bounded device-bound chunks. Pending bytes remain unscaled to avoid double gain
 on partial writes. Listening gain never enters jobs, projects or `ExportSpec`.
 
+`audio_meter.py` observes only accepted device writes from the original preview
+PCM before listening gain, without changing bytes or decoder/export jobs. NumPy
+reductions measure stereo sample peaks in blocks of at most 1024 frames; a bounded
+queue follows the sink's processed-sample clock. QML notifications are limited to
+about 30 Hz, with display decay and a short peak hold. Transport resets clear the
+meter. This is approximate monitoring, not true-peak or export-normalization
+measurement; no audio output means no meter activity.
+
 ## Timeline visual caches
 
 Separate read-only, cancellable jobs build waveform peaks and sparse keyframe

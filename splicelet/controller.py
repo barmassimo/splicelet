@@ -21,6 +21,7 @@ from .effects import Fades, video_gain
 from . import project
 from .visuals import build_visuals, waveform_columns, source_at
 from .sources import catalog_entry, source_for
+from .audio_meter import AudioMeter
 
 
 class FrameKeys(QObject):
@@ -81,6 +82,7 @@ class Preview(QObject):
     appearanceChanged = Signal()
     sourceChanged = Signal()
     sourceIndexed = Signal(int,str,object)
+    meterChanged = Signal()
 
     def __init__(self, provider, muted=False):
         super().__init__()
@@ -142,6 +144,8 @@ class Preview(QObject):
         self._base = 0.
         self._wall_start = 0.
         self._audio_pending = b''
+        self._meter = AudioMeter()
+        self._meter_update = 0.
         self._next_frame = None
         self._cache = OrderedDict()
         self._cache_bytes = 0
@@ -1135,6 +1139,9 @@ class Preview(QObject):
         self._playing = False
         self._audio_started = False
         self._audio_pending = b''
+        self._meter.reset()
+        self._meter_update = 0.
+        self.meterChanged.emit()
 
     def _request(self,position,play,endpoint=False):
         if not self._path or self._opening: return
@@ -1238,6 +1245,12 @@ class Preview(QObject):
     def _update_volume(self):
         if self.sink: self.sink.setVolume(0. if self._muted else min(1.,self._volume))
 
+    @Property('QVariantList',notify=meterChanged)
+    def audioLevels(self): return self._meter.levels
+
+    @Property('QVariantList',notify=meterChanged)
+    def audioPeaks(self): return self._meter.peaks
+
     def _listening_pcm(self,data):
         """Boost only device-bound PCM; retain raw pending bytes after partial writes."""
         if self._volume<=1.: return data
@@ -1286,6 +1299,7 @@ class Preview(QObject):
             if count<0:
                 raise RuntimeError('Cannot write to the audio device.')
             if not count: break
+            self._meter.append(self._audio_pending[:count],self.audio.sample_format)
             self._audio_pending = self._audio_pending[count:]
             available -= count
 
@@ -1338,6 +1352,11 @@ class Preview(QObject):
             self._status = '' if self.audioEnabled else 'No audio output'
         if self.audioEnabled:
             self._pump_audio()
+            meter_time = self.sink.processedUSecs()/1000000.
+            if meter_time-self._meter_update>=1/30:
+                self._meter.update(meter_time)
+                self._meter_update = meter_time
+                self.meterChanged.emit()
             if self.sink.error().value:
                 # Underrun resumes automatically when decoded samples arrive.
                 if 'Underrun' not in str(self.sink.error()):

@@ -862,7 +862,7 @@ ApplicationWindow {
                     onInteracted: { properties.finishEditing(); appMenu.close(); timeInput.focus = false }
                 }
                 GridLayout {
-                    columns: root.width<1000 ? 1 : 2
+                    columns: root.width<1200 ? 1 : 2
                     Layout.fillWidth: true
                     Layout.leftMargin: timeline.inset
                     Layout.rightMargin: timeline.inset
@@ -956,6 +956,13 @@ ApplicationWindow {
                                 Rectangle { width: volumeSlider.visualPosition*parent.width; height: parent.height; radius: 2; color: theme.accent }
                                 Rectangle { x: parent.width/2-width/2; anchors.verticalCenter: parent.verticalCenter; width: 2; height: 16; color: "#c34545" }
                             }
+                        }
+                        AudioMeter {
+                            preview: root.preview
+                            theme: themeColors
+                            Layout.preferredWidth: 166
+                            Layout.preferredHeight: 30
+                            Layout.leftMargin: 6
                         }
                     }
                 }

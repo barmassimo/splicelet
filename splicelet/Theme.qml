@@ -28,4 +28,7 @@ QtObject {
     readonly property color playhead: dark ? "#94c9ff" : "#184f82"
     readonly property color followPlayhead: dark ? "#ffbc70" : "#b84f00"
     readonly property color track: dark ? "#435267" : "#d6e0eb"
+    readonly property color meterGreen: dark ? "#58bd88" : "#328b5e"
+    readonly property color meterYellow: dark ? "#e6b54f" : "#c18a19"
+    readonly property color meterRed: dark ? "#ee7272" : "#c74141"
 }
