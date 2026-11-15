@@ -16,6 +16,8 @@ independent of each other and of the public Git history.
 
 ### Fixed
 
+- Avoid an integer overflow when exporting transitions from videos with a
+  noninteger average frame rate, including reimported variable-frame-rate exports.
 - Accept file imports by drag and drop throughout the workspace, including the
   side panel and timeline, with consistent copy feedback and unchanged originals.
 

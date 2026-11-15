@@ -182,6 +182,8 @@ are not bounded by the decoded queue/cache budgets.
 normalization options. Later UI edits cannot alter a running export. Shared sample
 mapping/envelopes prepare temporary float PCM. Non-overlap video uses source PTS;
 overlap intervals use the shared compositor and temporary lossless RGB FFV1/NUT.
+The intermediate stream's nominal rate uses a bounded rational approximation;
+explicit microsecond frame PTS retain the transition cadence independently.
 FFmpeg interleaves these with black gaps on the project clock and preserves fade
 phase when exporting a partial window.
 

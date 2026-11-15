@@ -267,7 +267,9 @@ class ExportTask(QObject):
         times = tuple(float(p*spec.time_base)-spec.origin for p in spec.source_pts)
         try:
             with av.open(str(path),'w',format='nut') as output:
-                stream = output.add_stream('ffv1',rate=Fraction(str(spec.fps)))
+                # Decimal average rates can exceed FFmpeg's AVRational limits.
+                # This is nominal metadata; explicit frame PTS keep the cadence.
+                stream = output.add_stream('ffv1',rate=Fraction(str(spec.fps)).limit_denominator(1000000))
                 stream.width,stream.height = spec.width,spec.height
                 stream.pix_fmt = 'bgr0'
                 stream.time_base = Fraction(1,1000000)

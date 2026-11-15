@@ -232,6 +232,23 @@ for start,end in ((0.,3.),(1.25,1.75),(2.25,2.75)):
     assert np.array_equal(np.fromfile(pcm_path,dtype='<f4').reshape(-1,2),pcm[round(start*48000):round(end*48000)])
 passed('real_export_full_and_partial_transition_windows_and_unaffected_window')
 
+# Reimported VFR exports can report a noninteger average cadence. Its decimal
+# expansion must not overflow AVRational or change the explicit transition PTS.
+transition_reference = run/'transition-reference.nut'
+task._transition_video(spec(),transition_reference)
+def transition_signature(path):
+    with av.open(str(path)) as container:
+        return [(frame.pts*frame.time_base,frame.to_ndarray(format='rgb24').tobytes())
+                for frame in container.decode(video=0)]
+reference_signature = transition_signature(transition_reference)
+irregular_spec = replace(spec(),fps=float(Fraction(7355,243)))
+irregular_transition = run/'transition-irregular-rate.nut'
+task._transition_video(irregular_spec,irregular_transition)
+assert transition_signature(irregular_transition)==reference_signature
+status,message = task._execute(irregular_spec,run/'irregular-rate.mp4')
+assert status=='success',message
+passed('noninteger_average_rate_exports_without_overflow_and_preserves_transition_pts_and_pixels')
+
 model.select(1); assert model.set_fade('audio_in',.5) and model.set_fade('video_in',.5)
 faded = read('audio',job('audio'))
 gain = np.clip((n-48000)/24000,0,1)
