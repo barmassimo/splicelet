@@ -381,10 +381,18 @@ class SmokeTest(QObject):
     def timeline_checks(self):
         p=self.preview
         timeline=self.window.findChild(QQuickItem,'editTimeline')
+        scroll=self.window.findChild(QQuickItem,'timelineScrollBar')
+        timeline.setProperty('viewDuration',0)
+        timeline.setProperty('viewStart',0)
+        yield lambda:True
+        assert scroll.isVisible() and not scroll.isEnabled()
+        fitted_geometry=(timeline.width(),timeline.height())
         p.selectClip(0)
         QTest.keyClick(self.window,Qt.Key.Key_Z)
         yield lambda:True
         assert timeline.property('visibleDuration')<p.duration
+        assert scroll.isVisible() and scroll.isEnabled()
+        assert (timeline.width(),timeline.height())==fitted_geometry
         p.selectClip(1,True)
         QTest.keyClick(self.window,Qt.Key.Key_Z)
         yield lambda:True
@@ -427,6 +435,8 @@ class SmokeTest(QObject):
         QTest.keyClick(self.window,Qt.Key.Key_Z)
         yield lambda:True
         assert timeline.property('viewStart')==0 and timeline.property('visibleDuration')==p.duration
+        assert scroll.isVisible() and not scroll.isEnabled()
+        assert (timeline.width(),timeline.height())==fitted_geometry
         self.passed('z_fits_selection_or_entire_project_when_empty')
 
         p.selectClip(1)

@@ -16,6 +16,8 @@ independent of each other and of the public Git history.
 
 ### Fixed
 
+- Keep the timeline scrollbar visible and disabled when scrolling is unnecessary,
+  preventing layout shifts when zooming between fitted and scrollable views.
 - Avoid an integer overflow when exporting transitions from videos with a
   noninteger average frame rate, including reimported variable-frame-rate exports.
 - Accept file imports by drag and drop throughout the workspace, including the

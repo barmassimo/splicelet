@@ -9,7 +9,7 @@ Item {
     enabled: !preview.openingProject
     signal interacted()
     objectName: "editTimeline"
-    implicitHeight: (scroll.visible ? scroll.y+scroll.height : preview.hasAudio ? audioLaneY+audioLaneHeight : 91)+6
+    implicitHeight: scroll.y+scroll.height+6
     readonly property real audioLaneY: 96
     readonly property real audioLaneHeight: 44
     property real waveformGain: 1
@@ -622,7 +622,7 @@ Item {
         objectName: "timelineScrollBar"
         x: timeline.inset; y: preview.hasAudio ? timeline.audioLaneY+timeline.audioLaneHeight+10 : 100; width: timeline.span; height: 12
         orientation: Qt.Horizontal
-        visible: timeline.visibleDuration<timeline.totalDuration-.000001
+        enabled: timeline.visibleDuration<timeline.totalDuration-.000001
         policy: ScrollBar.AlwaysOn
         minimumSize: Math.min(1,20/Math.max(1,width))
         size: timeline.visibleDuration/timeline.totalDuration

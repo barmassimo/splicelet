@@ -233,7 +233,7 @@ Thumbnails use sparse keyframes and can repeat at high zoom; they are approximat
 The waveform combines both channels' source peaks before fades/listening gain.
 Vertical waveform zoom changes only the drawing and resets on import/open.
 Background previews are cached under `artifacts/visuals` and never affect export.
-Zoomed views have a scrollbar;
+The timeline scrollbar is always visible and is disabled when the full timeline fits;
 narrow windows place scissors, zoom and listening controls in a second row.
 
 ## Export
