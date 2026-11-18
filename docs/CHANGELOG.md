@@ -6,6 +6,8 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+## 1.9.0 — 2026-11-18
+
 ### Added
 
 - Duplicate clips or consecutive selections at the drop position with Ctrl+drag,
@@ -27,6 +29,7 @@ independent of each other and of the public Git history.
 
 ### Development
 
+- Update appearance checks for the always-visible scrollbar and stable timeline height.
 - Change application versions only when explicitly asked to create a release;
   choose the increment from commits and cumulative changes since the latest
   applicable stable or matching-suffix tag, then tag the release. MAJOR increments

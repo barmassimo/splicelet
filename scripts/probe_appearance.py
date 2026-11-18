@@ -118,12 +118,14 @@ try:
     assert abs(status_row.mapToScene(QPointF()).x()-time_input.mapToScene(QPointF()).x())<1
     assert abs(status_row.mapToScene(QPointF(status_row.width(),0)).x()-timeline.mapToScene(QPointF(timeline.width()-inset,0)).x())<1
     compact_height=timeline.height()
-    timeline.setProperty('viewDuration',30); QTest.qWait(80)
     scrollbar=window.findChild(QQuickItem,'timelineScrollBar')
-    assert scrollbar.isVisible() and timeline.height()>compact_height
+    assert scrollbar.isVisible() and not scrollbar.isEnabled()
+    timeline.setProperty('viewDuration',30); QTest.qWait(80)
+    assert scrollbar.isVisible() and scrollbar.isEnabled() and timeline.height()==compact_height
     assert scrollbar.mapToScene(QPointF(0,scrollbar.height())).y()<time_input.mapToScene(QPointF()).y()
     window.grabWindow().save(str(OUT/'light-compact-zoom.png'))
     timeline.setProperty('viewDuration',0); QTest.qWait(80)
+    assert scrollbar.isVisible() and not scrollbar.isEnabled() and timeline.height()==compact_height
     preview.selectClip(0,True)
     snapshot=preview._clips.snapshot()
     passed('horizontal_panel_navigation_switches_pages')

@@ -125,11 +125,11 @@ try:
             QTest.qWait(600)
             assert timeline.property('viewStart')==view
             assert timeline.property('totalDuration')==extent
-            assert not scrollbar.isVisible()
+            assert scrollbar.isVisible() and not scrollbar.isEnabled()
             jitter=point+QPoint(-1 if side=='right' else 1,0)
             QTest.mouseMove(window,jitter)
             QTest.qWait(100)
-            assert timeline.property('viewStart')==view and not scrollbar.isVisible()
+            assert timeline.property('viewStart')==view and scrollbar.isVisible() and not scrollbar.isEnabled()
             QTest.mouseRelease(window,Qt.MouseButton.LeftButton,pos=jitter)
             wait(lambda:not preview.busy)
             assert preview._clips.snapshot()==original
