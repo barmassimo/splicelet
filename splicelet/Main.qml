@@ -412,7 +412,7 @@ ApplicationWindow {
                             ["C", "Split before the displayed frame"], ["D", "Duplicate clip without ripple"],
                             ["Delete", "Delete selection, leaving gaps"], ["J", "Join two adjacent selected clips"],
                             ["Ctrl+Z", "Undo"], ["Ctrl+Shift+Z / Ctrl+Y", "Redo"],
-                            ["Double-click clip", "Seek to the clicked point"], ["Ctrl+click", "Toggle clip selection"], ["Shift+click", "Select a consecutive range of clips"], ["Drag down from ruler", "Rectangle selection in the active lane; Ctrl toggles clips"], ["Drag selected clip", "Move a consecutive selection, keeping its gaps"], ["Alt while dragging", "Temporarily bypass snapping"]
+                            ["Double-click clip", "Seek to the clicked point"], ["Ctrl+click", "Toggle clip selection"], ["Shift+click", "Select a consecutive range of clips"], ["Drag down from ruler", "Rectangle selection in the active lane; Ctrl toggles clips"], ["Drag selected clip", "Move a consecutive selection, keeping its gaps"], ["Ctrl while dragging", "Duplicate at the drop position; + cursor indicates copying"], ["Alt while dragging", "Temporarily bypass snapping"]
                         ] },
                         { title: "View and zoom", entries: [
                             ["Ctrl++ / Ctrl+-", "Zoom in / out around the viewport center"], ["Ctrl+=", "Zoom in (alternative)"],

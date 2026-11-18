@@ -8,6 +8,8 @@ independent of each other and of the public Git history.
 
 ### Added
 
+- Duplicate clips or consecutive selections at the drop position with Ctrl+drag,
+  with a native copy cursor (+), linked/unlinked lanes and atomic Undo.
 - Add a compact horizontal stereo peak meter beside listening volume, measured
   before listening gain, with brief peak holds and active gray bars while muted.
 - Show the Git commit and local modification state in About, CLI version output,

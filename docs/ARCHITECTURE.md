@@ -108,6 +108,10 @@ only after a four-pixel horizontal drag threshold, matching clip body movement;
 stationary edge presses do not commit a trim. Use `WheelHandler` for wheel input:
 a full-area no-button `MouseArea`
 previously overrode trim cursor shapes. Snapping is pixel-based with Alt bypass.
+Ctrl during a body drag shows the native copy cursor and copies the moving groups
+at release. `Tracks.duplicate_selection` validates all lanes before committing
+new IDs, selection and one history entry; source pieces, reserves and effects
+are retained unchanged. Copy snapping also includes the original clip edges.
 
 ## Background work and playback
 

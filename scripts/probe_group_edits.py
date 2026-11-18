@@ -137,6 +137,31 @@ assert tracks.mixed_selection
 tracks.select(0,True); assert tracks.lane=='video' and tracks.video.selected_ids=={0}
 passed('mixed_selection_origin_clamp_union_delete_undo_and_unselected_drag_remain_consistent')
 
+for linked in (True,False):
+    tracks=Tracks(fixture())
+    if not linked: tracks.unlink()
+    tracks.video.select(1); tracks.video.select(2,True)
+    if not linked: tracks.audio.select(0)
+    before=tracks.snapshot(); originals={lane:m.clips.copy() for lane,m in (('video',tracks.video),('audio',tracks.audio))}
+    history=len(tracks.undo_stack)
+    assert tracks.duplicate_selection(1,Fraction(19))
+    for lane in ('video','audio'):
+        model=getattr(tracks,lane)
+        assert all(c in model.clips for c in originals[lane])
+        copies=[c for c in model.clips if c not in originals[lane]]
+        indices=(1,2) if linked or lane=='video' else (0,)
+        for c,i in zip(copies,indices):
+            assert c==replace(originals[lane][i],uid=c.uid,start=originals[lane][i].start+16)
+        if lane=='video' or not linked: assert model.selected_ids=={c.uid for c in copies}
+    assert tracks.video.extent==tracks.audio.extent and len(tracks.undo_stack)==history+1
+    after=tracks.snapshot(); tracks.undo(); assert tracks.snapshot()==before
+    tracks.redo(); assert tracks.snapshot()==after
+    before=tracks.snapshot(); history=len(tracks.undo_stack)
+    anchor=min(tracks.selected_indices)
+    assert not tracks.duplicate_selection(anchor,tracks.project_start(tracks.clips[anchor]))
+    assert tracks.snapshot()==before and len(tracks.undo_stack)==history
+passed('drag_copy_linked_and_mixed_groups_preserves_originals_exact_ranges_and_atomic_history')
+
 from PySide6.QtCore import QObject, QSettings, QUrl, Qt, QPointF, QPoint, QCoreApplication, QEvent, QLocale
 from PySide6.QtGui import QGuiApplication, QFontDatabase, QMouseEvent
 from PySide6.QtQml import QQmlApplicationEngine
@@ -375,6 +400,32 @@ try:
     preview.undoCut(); wait(lambda:not preview.busy); assert tracks.snapshot()==before
     window.grabWindow().save(str(OUT/'mixed-selection.png'))
     passed('qml_mixed_ctrl_rectangle_drag_each_lane_export_bounds_delete_and_atomic_history')
+    click(1)
+    before=tracks.snapshot(); originals=tracks.video.clips.copy(); history=len(tracks.undo_stack)
+    target=begin_drag(1,-10)
+    assert timeline.property('dragIndex')==1
+    QTest.mouseMove(window,target)
+    QTest.keyPress(window,Qt.Key.Key_Control)
+    QTest.qWait(80)
+    assert timeline.property('dragCopy')
+    assert window.cursor().shape()==Qt.CursorShape.DragCopyCursor,window.cursor().shape()
+    window.grabWindow().save(str(OUT/'ctrl-copy-drag.png'))
+    QTest.mouseRelease(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.ControlModifier|Qt.KeyboardModifier.AltModifier,target)
+    QTest.keyRelease(window,Qt.Key.Key_Control)
+    wait(lambda:not preview.busy)
+    assert len(tracks.video.clips)==len(originals)+1 and all(c in tracks.video.clips for c in originals)
+    assert len(tracks.undo_stack)==history+1
+    after=tracks.snapshot(); preview.undoCut(); wait(lambda:not preview.busy); assert tracks.snapshot()==before
+    preview.redoCut(); wait(lambda:not preview.busy); assert tracks.snapshot()==after
+    preview.undoCut(); wait(lambda:not preview.busy)
+    target=begin_drag(1,5)
+    QTest.keyPress(window,Qt.Key.Key_Control); QTest.qWait(60)
+    assert timeline.property('dragCopy')
+    QTest.keyRelease(window,Qt.Key.Key_Control); QTest.qWait(60)
+    assert not timeline.property('dragCopy') and window.cursor().shape()==Qt.CursorShape.ClosedHandCursor
+    end_drag(target)
+    assert len(tracks.video.clips)==len(originals)
+    passed('qml_ctrl_mid_drag_native_plus_cursor_copy_undo_redo_and_release_switches_to_move')
 finally:
     preview.close(); engine.deleteLater(); QCoreApplication.sendPostedEvents(None,QEvent.Type.DeferredDelete)
 (OUT/'report.json').write_text(json.dumps({'status':'pass','checks':checks},indent=2),encoding='utf-8')

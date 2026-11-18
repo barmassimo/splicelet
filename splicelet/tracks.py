@@ -1,5 +1,6 @@
 """Two lanes with automatic crossfades, globally linked until explicitly unlinked."""
 from copy import copy
+from dataclasses import replace
 from fractions import Fraction
 from .editing import Clips
 
@@ -171,6 +172,37 @@ class Tracks:
             model.undo_stack.clear(); model.redo_stack.clear()
         return True
     def resize(self,index,side,position): return self._edit('resize',index,side,position)
+    def duplicate_selection(self,index,target):
+        """Copy dragged groups atomically, retaining exact ranges and outsiders."""
+        groups = self.moving_groups(index)
+        if not groups: return False
+        anchor = self.active.clips[index]
+        earliest = min(model.clips[i].start for _,model,indices in groups for i in indices)
+        delta = max(self.origin-earliest,Fraction(str(target))+self.origin-anchor.start)
+        next_id = max(self.video.next_id,self.audio.next_id)
+        candidates = []
+        for _,model,indices in groups:
+            copies = [replace(model.clips[i],uid=next_id+j,start=model.clips[i].start+delta)
+                      for j,i in enumerate(indices)]
+            next_id += len(copies)
+            clips = sorted([*model.clips,*copies],key=lambda c:c.start)
+            if not model.valid_overlaps(clips): return False
+            candidates.append((model,clips,copies))
+        self.undo_stack.append(self.snapshot()); self.redo_stack.clear()
+        if not self.linked:
+            for model in (self.video,self.audio):
+                model.selected_ids.clear(); model.selection_anchor = None
+        for model,clips,copies in candidates:
+            model.clips = clips
+            model.selected_ids = {c.uid for c in copies}
+            model.selection_anchor = copies[0].uid
+        if self.linked:
+            self.other.clips = self.active.clips.copy()
+        extent = max(self.extent,*(model.end(c) for model,_,copies in candidates for c in copies))
+        for model in (self.video,self.audio):
+            model.extent = extent; model.next_id = next_id
+            model.undo_stack.clear(); model.redo_stack.clear()
+        return True
     def duplicate(self,index): return self._edit('duplicate',index)
     def join(self): return self.can_join and self._edit('join')
     def delete_selected(self):

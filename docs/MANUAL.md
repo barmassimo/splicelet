@@ -125,6 +125,7 @@ which includes everything between its outer boundaries.
 | Close a gap | Hover the gap and click its trash icon. Later clips in that lane move left and the project shortens where possible. Undo restores it. |
 | Join | **J** or **Edit > Join** joins exactly two selected, touching or partially overlapping consecutive clips, retaining source pieces, crossfades and outer fades. |
 | Move | Drag a clip body. Dragging an unselected clip selects and moves it alone. |
+| Duplicate by dragging | Hold **Ctrl** while dragging a clip body; release the mouse with Ctrl held to copy at that position. The copy cursor shows **+**. |
 | Trim | Drag a clip edge to hide/reveal source material without changing speed or the opposite edge. |
 | Duplicate | **D** or **Edit > Duplicate** copies the selected clip, or the clip under the playhead without a selection. |
 
@@ -134,7 +135,12 @@ After unlinking, dragging any selected clip moves the selected video and audio
 clips by the same amount, retaining their relative timing without relinking them.
 An invalid overlap in either lane cancels the entire move. Delete also removes
 the selection from both lanes as one undoable operation. Join requires a
-selection in one lane; duplication requires exactly one clip.
+selection in one lane; **D** duplication requires exactly one clip.
+Ctrl+drag copies the same consecutive selection that a normal drag would move,
+including selected clips in both unlinked lanes. Releasing Ctrl switches back
+to moving. Originals and other clips stay in place; invalid nested or triple
+overlaps reject the whole copy. A copy selects the duplicates and takes one undo
+entry. Ctrl+click without dragging still toggles selection.
 Moves never ripple other clips and produce one undo entry. Edges snap to other
 boundaries and the playhead; **Alt** bypasses snapping. Dragging near a viewport
 edge scrolls. Partial outer overlaps can create crossfades, but another clip
@@ -148,7 +154,7 @@ retained pieces without resurrecting deliberately deleted material.
 Video-derived cuts/trims follow actual source frame edges. Audio-only sources
 use decoded audio-block boundaries; individual-sample editing is not provided.
 
-Duplication copies source pieces, names and fades. It uses adjacent space on the
+Duplication copies source pieces, names and fades. **D** uses adjacent space on the
 right, otherwise the left; an interior clip needs a sufficiently large gap.
 The last clip can extend the project right, and the first can extend it left
 when its right side is occupied. Existing clips do not move automatically.

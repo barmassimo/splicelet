@@ -34,6 +34,18 @@ Item {
     readonly property var ticks: makeTicks()
     readonly property var minorTicks: makeMinorTicks()
     property int dragIndex: -1
+    property bool dragCopy: false
+    MouseArea {
+        objectName: "clipDragCursor"
+        anchors.fill: parent; z: 100
+        visible: timeline.dragIndex>=0
+        acceptedButtons: Qt.NoButton; hoverEnabled: true
+        cursorShape: timeline.dragCopy ? Qt.DragCopyCursor : Qt.ClosedHandCursor
+    }
+    Connections {
+        target: preview
+        function onCopyModifierChanged(pressed) { if (timeline.dragIndex>=0) timeline.dragCopy=pressed }
+    }
     property real dragStart: 0
     property var dragClips: []
     property real pressX: 0
@@ -433,7 +445,7 @@ Item {
                 id: clipMouse
                 anchors.fill: parent
                 hoverEnabled: true
-                cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+                cursorShape: pressed ? (timeline.dragCopy ? Qt.DragCopyCursor : Qt.ClosedHandCursor) : Qt.OpenHandCursor
                 preventStealing: true
                 property bool moved: false
                 property var moving: []
@@ -441,6 +453,7 @@ Item {
                     timeline.followEnabled=false
                     timeline.interacted()
                     moved=false
+                    timeline.dragCopy=Boolean(mouse.modifiers & Qt.ControlModifier)
                     moving=preview.movingClips(modelData.index)
                     timeline.pressX=mapToItem(timeline,mouse.x,mouse.y).x
                     timeline.pressView=timeline.viewStart
@@ -454,8 +467,9 @@ Item {
                     if (!moving.length) return
                     timeline.dragIndex=modelData.index
                     timeline.dragClips=moving
+                    timeline.dragCopy=Boolean(mouse.modifiers & Qt.ControlModifier)
                     let raw=timeline.originalStart+(x-timeline.pressX)*timeline.secondsPerPixel+timeline.viewStart-timeline.pressView
-                    timeline.dragStart=preview.moveTarget(modelData.index,raw,timeline.secondsPerPixel,Boolean(mouse.modifiers & Qt.AltModifier))
+                    timeline.dragStart=preview.moveTarget(modelData.index,raw,timeline.secondsPerPixel,Boolean(mouse.modifiers & Qt.AltModifier),timeline.dragCopy)
                 }
                 onReleased: function(mouse) {
                     if (moved && timeline.dragIndex>=0) {
@@ -463,7 +477,8 @@ Item {
                         let target=timeline.dragStart
                         timeline.dragIndex=-1
                         timeline.interacted()
-                        preview.moveClip(index,target)
+                        if (mouse.modifiers & Qt.ControlModifier) preview.duplicateClipAt(index,target)
+                        else preview.moveClip(index,target)
                     }
                 }
                 onCanceled: timeline.dragIndex=-1

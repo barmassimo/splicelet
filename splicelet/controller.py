@@ -31,6 +31,11 @@ class FrameKeys(QObject):
         self.window,self.preview = window,preview
 
     def eventFilter(self,receiver,event):
+        if receiver is self.window:
+            if event.type() in (QEvent.Type.KeyPress,QEvent.Type.KeyRelease) and event.key()==Qt.Key.Key_Control:
+                self.preview.copyModifierChanged.emit(event.type()==QEvent.Type.KeyPress)
+            elif event.type()==QEvent.Type.WindowDeactivate:
+                self.preview.copyModifierChanged.emit(False)
         if receiver is self.window and event.type()==QEvent.Type.KeyPress:
             if not self.window.property('transportKeysEnabled'):
                 return False
@@ -71,6 +76,7 @@ class FrameProvider(QQuickImageProvider):
 
 
 class Preview(QObject):
+    copyModifierChanged = Signal(bool)
     changed = Signal()
     frameChanged = Signal()
     indexed = Signal(int, str, object)
@@ -670,7 +676,8 @@ class Preview(QObject):
                 for lane,model,i,clip in self._moving_items(index)]
 
     @Slot(int,float,float,bool,result=float)
-    def moveTarget(self,index,target,seconds_per_pixel,disable_snap):
+    @Slot(int,float,float,bool,bool,result=float)
+    def moveTarget(self,index,target,seconds_per_pixel,disable_snap,copy=False):
         index = self._activate_index(index,True)
         if not self._clips or not 0<=index<len(self._clips.clips): return target
         clip = self._clips.clips[index]
@@ -686,12 +693,23 @@ class Preview(QObject):
             anchors = [0.,self._position]
             for lane,model in self._lanes():
                 for other in model.clips:
-                    if (lane,other.uid) not in ids: anchors += [self._clip_start(other),self._clip_end(other)]
+                    if copy or (lane,other.uid) not in ids: anchors += [self._clip_start(other),self._clip_end(other)]
             offsets = {edge-self._clip_start(clip) for c in moving for edge in (self._clip_start(c),self._clip_end(c))}
             candidates = [edge-offset for edge in anchors for offset in offsets if edge-offset>=minimum]
             closest = min(candidates,key=lambda start:abs(start-target))
             if abs(closest-target)<=seconds_per_pixel*8: return closest
         return max(minimum,round(target*self._fps)/self._fps)
+
+    @Slot(int,float)
+    def duplicateClipAt(self,index,target):
+        index = self._activate_index(index,True)
+        if self._clips:
+            if self._clips.duplicate_selection(index,target):
+                self._status = 'Clips duplicated.' if self.selectionCount>1 else 'Clip duplicated.'
+                self._editing_changed()
+            else:
+                self._status = 'Cannot duplicate: select consecutive clips in each lane; nested and triple overlaps are not supported.'
+                self.changed.emit()
 
     @Slot(int,float)
     def moveClip(self,index,target):
