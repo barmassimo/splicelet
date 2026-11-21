@@ -266,12 +266,14 @@ try:
     click(window.findChild(QQuickItem,'sourceTab'))
     assert window.findChild(QObject,'sidePanelTabs').property('currentIndex')==1
     window.grabWindow().save(str(run/'source-library.png'))
+    preview.unlinkAudio(); idle()
     click(item_named('appendSource2')); idle()
     assert preview.duration==8
+    assert preview._clips.video.clips[-1]==preview._clips.audio.clips[-1]
     preview.undoCut(); idle(); assert preview.duration==6.5
     assert preview.addSpace('end','3'); idle()
     timeline = window.findChild(QQuickItem,'editTimeline')
-    entry = item_named('sourceEntry2')
+    entry = item_named('sourceEntry1')
     assert entry and entry.isVisible()
     start = entry.mapToScene(QPointF(70,20)).toPoint()
     target = timeline.mapToScene(QPointF(timeline.property('inset')+7/timeline.property('secondsPerPixel'),55)).toPoint()
@@ -284,11 +286,13 @@ try:
     QTest.mouseRelease(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.AltModifier,target)
     idle()
     assert any(abs(float(c.start)-7)<.08 for c in preview._clips.video.clips),preview.clips
+    assert preview._clips.video.clips[-1]==preview._clips.audio.clips[-1]
+    assert not preview._clips.linked
     window.grabWindow().save(str(run/'library-drop.png'))
     window.setWidth(760); window.setHeight(560); QTest.qWait(100)
     window.grabWindow().save(str(run/'minimum.png'))
     preview.setDarkTheme(True); QTest.qWait(100); window.grabWindow().save(str(run/'dark.png'))
-    passed('actual_qml_tabs_append_drag_drop_undo_light_dark_and_minimum_layout')
+    passed('qml_append_and_drag_insert_both_unlinked_lanes_with_undo_and_layout_checks')
 
     # Audio-first projects remain black, and the first later video fixes the canvas.
     preview.open_path(str(audio)); idle()
@@ -321,12 +325,13 @@ try:
     export(offset_spec,'vfr-offset.mp4')
     passed('heterogeneous_vfr_nonzero_source_origin_and_export_window')
 
-    # Independent lanes retain their own content when importing/inserting.
+    # Insertion is atomic when only one lane has an available position.
     preview.unlinkAudio(); idle()
-    before_video = preview._clips.video.clips.copy()
-    preview.insertSource(0,preview.duration,'audio'); idle()
-    assert preview._clips.video.clips==before_video
-    assert preview._clips.audio.clips!=before_video
+    preview.selectClip(1000000)
+    preview.deleteSelected(); idle()
+    before = preview._clips.snapshot()
+    preview.insertSource(0,0,'audio'); idle()
+    assert preview._clips.snapshot()==before
     preview.undoCut(); idle()
     task = ExportTask()
     task.updated.connect(lambda fraction,text:task.cancel() if fraction>0 else None)
@@ -334,7 +339,7 @@ try:
     outcome,message = task._execute(preview.export_spec(False),cancelled_path)
     assert outcome=='cancelled' and not cancelled_path.exists(),message
     assert not list(run.glob('.video-export-*'))
-    passed('unlinked_insertion_is_lane_local_and_multi_source_cancel_cleans_temporaries')
+    passed('unlinked_insertion_rejects_invalid_overlap_atomically_and_export_cancel_cleans_temporaries')
 
     preview.open_path(str(red)); idle()
     preview.importUrls([QUrl.fromLocalFile(str(silent))]); idle()

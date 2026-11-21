@@ -14,6 +14,9 @@ independent of each other and of the public Git history.
 
 ### Changed
 
+- Place a source on both lanes when dragging it to the timeline or using **+**,
+  including in Unlinked mode.
+
 - Suggest `<source>_exported.mp4` when exporting the whole project with one source.
 
 ## 1.9.0 — 2026-11-18

@@ -968,12 +968,10 @@ class Preview(QObject):
     @Slot(int,float,str)
     def insertSource(self,index,position,lane='video'):
         if self._clips is None or index not in self._source_order or not math.isfinite(position) or self._exporting or self._pending_project: return
-        before = self._clips.snapshot()
-        self._clips.activate('audio' if lane=='audio' else 'video')
-        if self._clips.insert_source(self._sources[index],position): self._editing_changed()
+        if self._clips.insert_source(self._sources[index],position,'audio' if lane=='audio' else 'video'):
+            self._editing_changed()
         else:
-            self._clips.restore_snapshot(before)
-            self._status = 'Cannot place source here. Use free space or a partial overlap of two clips.'
+            self._status = 'Cannot place source here. Both lanes need free space or a valid partial overlap.'
             self.changed.emit()
 
     @Slot(int)

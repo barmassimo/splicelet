@@ -65,9 +65,10 @@ remove any remaining timeline gaps. Removal discards the history needed to
 bring that source back.
 Drag a row onto the timeline to place it. The insertion marker snaps to
 boundaries; **Alt** bypasses snapping. Its **+** button or double-click appends
-it to the project. Reusing a source creates an independent clip. Placement never
-moves existing clips automatically; free space and partial two-clip overlaps
-are allowed, nesting and triple overlaps are rejected.
+it to the project. Placement adds the source to both lanes at the same time,
+even in Unlinked mode, and is undone in one step. The two clips remain
+independently editable in Unlinked mode. Placement leaves existing clips in
+place and requires free space or a valid partial overlap on each lane.
 
 The **first imported video fixes the project resolution**, even if not placed.
 Later videos fit with preserved display proportions and black padding. Each

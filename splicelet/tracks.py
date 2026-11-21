@@ -123,21 +123,23 @@ class Tracks:
         self.linked = False
         return True
 
-    def insert_source(self,source,position):
-        """Place a source without ripple; linked lanes share a black/silent partner."""
+    def insert_source(self,source,position,lane=None):
+        """Place matching source ranges on both lanes as one edit."""
         from .editing import Clip
-        from fractions import Fraction
         position = Fraction(str(position))+self.origin
         if position<self.origin: return False
         uid = max(self.video.next_id,self.audio.next_id)
         clip = Clip(uid,position,((source.first,source.end),))
-        targets = (self.video,self.audio) if self.linked else (self.active,)
+        targets = (self.video,self.audio)
         for model in targets:
             if not model.valid_overlaps(sorted([*model.clips,clip],key=lambda c:c.start)): return False
         self.undo_stack.append(self.snapshot()); self.redo_stack.clear()
+        if lane is not None: self.activate(lane)
         for model in targets:
             model.clips.append(clip); model.clips.sort(key=lambda c:c.start)
-            model.selected_ids = {uid}; model.selection_anchor = uid
+            selected = self.linked or model is self.active
+            model.selected_ids = {uid} if selected else set()
+            model.selection_anchor = uid if selected else None
         extent = max(self.extent,*(model.end(clip) for model in targets))
         for model in (self.video,self.audio):
             model.next_id = uid+1; model.extent = extent
