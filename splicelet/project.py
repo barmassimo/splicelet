@@ -20,10 +20,10 @@ def fraction(value):
     return Fraction(*value)
 
 
-def timeline(model):
+def timeline(model,source_ids=None):
     from .tracks import Tracks
     if isinstance(model,Tracks):
-        return {'video':timeline(model.video),'audio':timeline(model.audio),'linked':model.linked}
+        return {'video':timeline(model.video,source_ids),'audio':timeline(model.audio,source_ids),'linked':model.linked}
     def ranges(pieces):
         result = []
         if not model.sources:
@@ -31,7 +31,9 @@ def timeline(model):
         for a,b in pieces:
             for i,s in enumerate(model.sources):
                 first,end = max(a,s.first),min(b,s.end)
-                if first<end: result.append({'source':f'source-{i+1}','first':first-s.first,'end':end-s.first})
+                if first<end:
+                    source_id = f'source-{(i if source_ids is None else source_ids[i])+1}'
+                    result.append({'source':source_id,'first':first-s.first,'end':end-s.first})
         return result
     def encode(c):
         return {'id':c.uid,'start':rational(c.start),**({'name':c.name} if c.name else {}),
@@ -48,11 +50,16 @@ def source_info(path):
     return {'size':stat.st_size,'mtime_ns':stat.st_mtime_ns}
 
 
-def document(model,source,canvas=None):
+def document(model,source,canvas=None,source_indices=None):
     path = str(Path(source).resolve())
     sources = getattr(model,'sources',())
     lanes = (model.video,model.audio) if hasattr(model,'video') else (model,)
     compound = any(c.components for lane in lanes for c in lane.clips)
+    if source_indices is not None:
+        return {'format':'splicelet','version':4 if compound else 3,
+                'sources':[{'id':f'source-{i+1}','path':sources[index].path,**source_info(sources[index].path)}
+                           for i,index in enumerate(source_indices)],
+                'canvas':canvas,'timeline':timeline(model,{index:i for i,index in enumerate(source_indices)})}
     if sources and (len(sources)>1 or not sources[0].has_video):
         return {'format':'splicelet','version':4 if compound else 3,
                 'sources':[{'id':f'source-{i+1}','path':s.path,**source_info(s.path)} for i,s in enumerate(sources)],
@@ -69,6 +76,25 @@ def read(path):
     if data.get('format')!='splicelet' or type(data.get('version')) is not int or data['version'] not in (1,2,3,4):
         raise ValueError('Unsupported Splicelet project format or version.')
     validate_sources(data)
+    settings = data.get('editor',{})
+    if not isinstance(settings,dict):
+        raise ValueError('Invalid project editor settings.')
+    for key,low,high in (('volume',0,2),('waveform_gain',1,256)):
+        value = settings.get(key,1)
+        if type(value) not in (int,float) or not low<=value<=high:
+            raise ValueError('Invalid project editor settings.')
+    order = settings.get('source_order',list(range(len(data['sources']))))
+    if (not isinstance(order,list) or any(type(i) is not int for i in order)
+            or sorted(order)!=list(range(len(data['sources'])))):
+        raise ValueError('Invalid project source order.')
+    clock = settings.get('catalog_clock')
+    if clock is not None and (
+        not isinstance(clock,dict) or 'canvas' not in data
+        or type(clock.get('base')) is not int or not 1<=clock['base']<=2147483647
+        or type(clock.get('fps')) not in (int,float) or not 0<clock['fps']<float('inf')
+        or type(clock.get('has_audio')) is not bool or type(clock.get('canvas_locked')) is not bool
+    ):
+        raise ValueError('Invalid project catalog clock.')
     if data['version']==3 or 'canvas' in data:
         canvas = data.get('canvas')
         if not isinstance(canvas,dict) or any(type(canvas.get(k)) is not int or not 1<=canvas[k]<=32768 for k in ('width','height')):
@@ -78,7 +104,9 @@ def read(path):
 
 def validate_sources(data):
     sources = data['sources']
-    if not isinstance(sources,list) or not sources:
+    editor = data.get('editor')
+    empty = ('canvas' in data and isinstance(editor,dict) and isinstance(editor.get('catalog_clock'),dict))
+    if not isinstance(sources,list) or (not sources and not empty):
         raise ValueError('The project has no imported sources.')
     for source in sources:
         if not isinstance(source,dict) or not isinstance(source.get('path'),str): raise ValueError('Invalid imported source reference.')
@@ -103,6 +131,8 @@ def restore(data,times,duration,sources=()):
         if type(linked) is not bool: raise ValueError('Invalid audio/video link mode.')
         if video.origin!=audio.origin or video.extent!=audio.extent or (linked and video.clips!=audio.clips):
             raise ValueError('Invalid linked lanes or project bounds.')
+        if not data.get('sources',True) and video.extent!=video.origin:
+            raise ValueError('A project without sources cannot contain timeline space.')
         audio.selected_ids.clear(); audio.selection_anchor = None
         return Tracks(video,audio,linked)
     model = Clips(len(times),times,duration)
@@ -162,10 +192,12 @@ def restore(data,times,duration,sources=()):
     return model
 
 
-def write(path,data):
+def write(path,data,other_sources=()):
     destination = Path(path).resolve()
-    for source in data['sources']:
-        source_file = Path(source['path'])
+    source_paths = [item['path'] for item in data['sources']]
+    source_paths.extend(path for path in other_sources if Path(path).exists())
+    for source in source_paths:
+        source_file = Path(source)
         if destination==source_file.resolve() or (destination.exists() and os.path.samefile(destination,source_file)):
             raise ValueError('A project cannot replace an imported source or a source alias.')
     temporary = None

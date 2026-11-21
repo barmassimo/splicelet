@@ -86,6 +86,7 @@ class Preview(QObject):
     projectError = Signal(str)
     visualsChanged = Signal()
     appearanceChanged = Signal()
+    editorSettingsChanged = Signal()
     sourceChanged = Signal()
     sourceIndexed = Signal(int,str,object)
     meterChanged = Signal()
@@ -101,6 +102,9 @@ class Preview(QObject):
         self._saved_timeline = None
         self._pending_project = None
         self._sources = ()
+        self._source_order = []
+        self._retained_catalog_clock = False
+        self._waveform_gain = 1.
         self._source_identities = {}
         self._source_visuals = {}
         self._saved_catalog = None
@@ -200,7 +204,7 @@ class Preview(QObject):
     def projectName(self): return Path(self._project_path).stem if self._project_path else 'Untitled'
     @Property(bool,notify=projectChanged)
     def projectDirty(self):
-        return self._clips is not None and (project.timeline(self._clips)!=self._saved_timeline or self._catalog_state()!=self._saved_catalog)
+        return self._clips is not None and (self._catalog_state()!=self._saved_catalog or project.timeline(self._clips)!=self._saved_timeline)
     @Property(bool,notify=projectChanged)
     def hasProjectPath(self): return bool(self._project_path)
     @Property(bool,notify=projectChanged)
@@ -210,7 +214,19 @@ class Preview(QObject):
     @Property(bool,notify=projectChanged)
     def canSaveProject(self): return self._clips is not None and self._pending_project is None and not self._importing
 
-    def _catalog_state(self): return ([s.path for s in self._sources],self._width,self._height)
+    def _editor_settings(self):
+        return {'volume':self._volume,'waveform_gain':self._waveform_gain,'source_order':self._source_order.copy()}
+
+    def _restore_editor_settings(self,document):
+        settings = document.get('editor',{})
+        self._volume = settings.get('volume',1.)
+        self._waveform_gain = settings.get('waveform_gain',1.)
+        self._source_order = list(settings.get('source_order',range(len(self._sources))))
+        self._update_volume()
+        self.editorSettingsChanged.emit()
+
+    def _catalog_state(self):
+        return ([s.path for s in self._sources],self._width,self._height,self._editor_settings())
 
     @Property(bool,notify=sourceChanged)
     def importing(self): return self._importing
@@ -219,20 +235,87 @@ class Preview(QObject):
     def importedSources(self):
         return [{'index':i,'name':Path(s.path).name,'path':s.path,'duration':float(s.duration)-float(self._source_index[s.first]-s.offset),'durationText':self.format_time(float(s.duration)),
                  'kind':'Video' if s.has_video else 'Audio','detail':f'{s.width} × {s.height}' if s.has_video else 'Audio · black video'}
-                for i,s in enumerate(self._sources)]
+                for i in self._source_order for s in (self._sources[i],)]
+
+    @Slot(int,int)
+    def moveSource(self,index,target):
+        if self.busy or self._importing or self._exporting or index==target: return
+        if index not in self._source_order or target not in self._source_order: return
+        position = self._source_order.index(target)
+        self._source_order.remove(index)
+        self._source_order.insert(position,index)
+        self.sourceChanged.emit()
+        self.projectChanged.emit()
+
+    @Slot(int)
+    def removeSource(self,index):
+        if self.busy or self._importing or self._exporting or index not in self._source_order: return
+        source = self._sources[index]
+        def uses(clip):
+            return any(a<source.end and b>source.first
+                       for a,b in (*clip.pieces,*clip.left_reserve,*clip.right_reserve)) or any(map(uses,clip.components))
+        def referenced(lanes):
+            return any(uses(clip) for clips in lanes for clip in clips)
+        if referenced(model.clips for _,model in self._lanes()):
+            self._status = 'Remove all timeline clips and trim reserves that use this source first.'
+        elif len(self._source_order)==1 and self._duration>0:
+            self._status = 'Remove the remaining timeline gaps before removing the last source.'
+        else:
+            # Keep virtual coordinates stable. Discard history up to the nearest
+            # state that would bring a reference to the removed source back.
+            for stack in (self._clips.undo_stack,self._clips.redo_stack):
+                boundary = next((i for i in range(len(stack)-1,-1,-1)
+                                 if referenced((stack[i][0][0],stack[i][1][0]))),-1)
+                del stack[:boundary+1]
+            self._source_order.remove(index)
+            if index==0:
+                self._index_cancel.set()
+                self._waveform = None
+                self._thumbnails = ([],[])
+                self._visual_status = ''
+                self.visualsChanged.emit()
+            if not self._source_order:
+                self._import_cancel.set()
+                self._import_cancel = threading.Event()
+                self._source_generation += 1
+                self._clips.undo_stack.clear()
+                self._clips.redo_stack.clear()
+                self._sources = ()
+                self._source_index = []
+                self._video_pts = []
+                self._origin = self._source_duration = 0.
+                self._has_audio = False
+                self._audio_timeline = None
+                for _,model in self._lanes():
+                    model.sources = model.times = ()
+                    model.edges = (Fraction(0),)
+                    model.frame_count = 0
+                    model.source_duration = Fraction(0)
+            self._retained_catalog_clock = True
+            if source.path==self._path:
+                self._path = self._sources[min(self._source_order)].path if self._source_order else ''
+                self._name = Path(self._path).name if self._path else ''
+            self._source_visuals.pop(source.path,None)
+            self._status = 'Source removed from the project.'
+            self.sourceChanged.emit()
+            self.editChanged.emit()
+            self.projectChanged.emit()
+        self.changed.emit()
 
     def _source_sources(self):
+        if self._retained_catalog_clock:
+            return tuple(self._sources[i] for i in sorted(self._source_order))
         return self._sources if len(self._sources)>1 or (self._sources and not self._sources[0].has_video) else ()
 
     def _store_source_visual(self,path,event,value):
-        if all(s.path!=path for s in self._sources): return
+        if all(self._sources[i].path!=path for i in self._source_order): return
         self._source_visuals.setdefault(path,{})[event] = value
         self._bound_waveforms()
 
     def _bound_waveforms(self):
         # Keep every source visible while coarsening very large libraries to a
         # shared 128 MiB peak-pyramid budget. Disk caches retain full detail.
-        budget = max(16,128*1024*1024//max(1,len(self._sources)))
+        budget = max(16,128*1024*1024//max(1,len(self._source_order)))
         for values in self._source_visuals.values():
             wave = values.get('waveform')
             if wave is None: continue
@@ -279,15 +362,26 @@ class Preview(QObject):
         if not self.canSaveProject or not url.isLocalFile(): return False
         path = str(Path(url.toLocalFile()).resolve())
         try:
-            for source,identity in self._source_identities.items():
+            indices = sorted(self._source_order)
+            paths = {self._sources[i].path for i in indices}
+            for source in paths:
+                identity = self._source_identities[source]
                 if project.source_info(source)!=identity: raise ValueError(f'Imported source has changed:\n{source}')
-            data = project.document(self._clips,self._path,{'width':self._width,'height':self._height})
-            project.write(path,data)
+            data = project.document(self._clips,self._path,{'width':self._width,'height':self._height},
+                                    indices if self._retained_catalog_clock else None)
+            editor = self._editor_settings()
+            if self._retained_catalog_clock:
+                ids = {index:i for i,index in enumerate(indices)}
+                editor['source_order'] = [ids[index] for index in self._source_order]
+                editor['catalog_clock'] = {'fps':self._fps,'base':self._video_time_base.denominator,
+                                           'has_audio':self._has_audio,'canvas_locked':self._canvas_locked}
+            data['editor'] = editor
+            project.write(path,data,self._source_identities.keys()-paths)
         except (OSError,ValueError) as exc:
             self.projectError.emit(f'Cannot save project:\n{path}\n\n{exc}')
             return False
         self._project_path = path
-        self._saved_timeline = data['timeline']
+        self._saved_timeline = project.timeline(self._clips)
         self._saved_catalog = self._catalog_state()
         self._remember_project(path)
         return True
@@ -535,6 +629,9 @@ class Preview(QObject):
         if self._clips is None: return QUrl()
         source = Path(self._path)
         suffix = f'_clip-{self._clips.selected+1}' if selected and self.selectionCount else '_export'
+        if not selected and len(self._source_order)==1:
+            source = Path(self._sources[self._source_order[0]].path)
+            suffix = '_exported'
         return QUrl.fromLocalFile(str(source.with_name(f'{source.stem}{suffix}.mp4')))
     @Property(bool,notify=exportChanged)
     def exporting(self): return self._exporting
@@ -644,7 +741,7 @@ class Preview(QObject):
 
     @Slot(str,str,result=bool)
     def addSpace(self,side,text):
-        if self._clips is None or self.busy: return False
+        if self._clips is None or not self._source_order or self.busy: return False
         try:
             value = float(text.strip())
             if not math.isfinite(value) or value<=0: raise ValueError('Enter a positive number of seconds using a decimal point.')
@@ -837,16 +934,16 @@ class Preview(QObject):
             url = value if isinstance(value,QUrl) else QUrl(str(value))
             if url.isLocalFile():
                 path = str(Path(url.toLocalFile()).resolve())
-                if path not in paths and path not in self._import_queue and all(s.path!=path for s in self._sources): paths.append(path)
+                if path not in paths and path not in self._import_queue and all(self._sources[i].path!=path for i in self._source_order): paths.append(path)
         if not paths: return
-        if not self._path:
+        if not self._path and self._clips is None:
             first = paths.pop(0)
             self.open_path(first)
         self._import_queue.extend(paths)
         self._start_import_next()
 
     def _start_import_next(self):
-        if self._importing or not self._sources or not self._import_queue or self._closed: return
+        if self._importing or self._clips is None or not self._import_queue or self._closed: return
         path = self._import_queue.pop(0)
         self._importing = True
         self.sourceChanged.emit(); self.projectChanged.emit()
@@ -870,7 +967,7 @@ class Preview(QObject):
 
     @Slot(int,float,str)
     def insertSource(self,index,position,lane='video'):
-        if self._clips is None or not 0<=index<len(self._sources) or not math.isfinite(position) or self._exporting or self._pending_project: return
+        if self._clips is None or index not in self._source_order or not math.isfinite(position) or self._exporting or self._pending_project: return
         before = self._clips.snapshot()
         self._clips.activate('audio' if lane=='audio' else 'video')
         if self._clips.insert_source(self._sources[index],position): self._editing_changed()
@@ -881,11 +978,14 @@ class Preview(QObject):
 
     @Slot(int)
     def appendSource(self,index):
-        if 0<=index<len(self._sources): self.insertSource(index,self._duration,'video' if self._sources[index].has_video else 'audio')
+        if index in self._source_order: self.insertSource(index,self._duration,'video' if self._sources[index].has_video else 'audio')
 
     def _extend_catalog(self,path,metadata,index,identity):
+        first = not self._source_order
         source,times = catalog_entry(path,metadata,index,self._sources)
+        if first: self._origin = source.origin
         self._sources = (*self._sources,source)
+        self._source_order.append(len(self._sources)-1)
         self._bound_waveforms()
         self._source_identities[path] = identity
         exact = tuple(self._clips.video.times)+times
@@ -901,13 +1001,19 @@ class Preview(QObject):
             self._width,self._height,self._fps = source.width,source.height,source.fps
             self._canvas_locked = True
         # The project clock represents every source PTS; it is independent of output cadence.
-        denominator = math.lcm(*(s.time_base.denominator for s in self._sources),*(s.offset.denominator for s in self._sources))
+        denominator = math.lcm(*(s.time_base.denominator for s in self._sources),*(s.offset.denominator for s in self._sources),
+                               self._video_time_base.denominator if self._retained_catalog_clock else 1)
         if denominator>2147483647: denominator = 1000000
         self._video_time_base = Fraction(1,denominator)
         self._video_pts = [round((t+Fraction(str(self._origin)))/self._video_time_base) for t in exact]
-        self._has_audio = any(s.audio_timeline for s in self._sources)
-        self._audio_timeline = next((s.audio_timeline for s in self._sources if s.audio_timeline),None)
-        self._editing_changed()
+        self._audio_timeline = next((s.audio_timeline for s in self._sources if s.audio_timeline),self._audio_timeline if self._retained_catalog_clock else None)
+        self._has_audio = bool(self._audio_timeline)
+        if first:
+            self._path = path
+            self._name = Path(path).name
+            self.appendSource(len(self._sources)-1)
+        else:
+            self._editing_changed()
         self.sourceChanged.emit()
 
     def _load_multi_project(self,path,document):
@@ -958,7 +1064,7 @@ class Preview(QObject):
                 for source_file,metadata,index,identity in entries:
                     source,local = catalog_entry(source_file,metadata,index,sources)
                     sources = (*sources,source); times += local
-                duration = sources[-1].offset+sources[-1].duration
+                duration = sources[-1].offset+sources[-1].duration if sources else Fraction(0)
                 tracks = project.restore(document,times,duration,sources)
             except (OSError,ValueError,KeyError,TypeError,OverflowError) as exc:
                 self._receive_source(generation,'project-error',str(exc)); return
@@ -966,13 +1072,18 @@ class Preview(QObject):
             self._index_cancel = threading.Event(); self._import_cancel = threading.Event()
             self._source_generation += 1
             self._sources = sources; self._clips = tracks
+            self._restore_editor_settings(document)
             self._source_identities = {entry[0]:entry[3] for entry in entries}
-            self._source_identity = entries[0][3]
-            self._path = sources[0].path; self._name = Path(self._path).name
-            self._origin = sources[0].origin
+            self._source_identity = entries[0][3] if entries else None
+            self._path = sources[0].path if sources else ''
+            self._name = Path(self._path).name
+            self._origin = sources[0].origin if sources else 0.
             self._source_index = [float(t) for t in times]
             self._source_duration = float(duration)
             denominator = math.lcm(*(s.time_base.denominator for s in sources),*(s.offset.denominator for s in sources))
+            clock = document.get('editor',{}).get('catalog_clock')
+            self._retained_catalog_clock = clock is not None
+            if clock: denominator = clock['base']
             self._video_time_base = Fraction(1,denominator if denominator<=2147483647 else 1000000)
             self._video_pts = [round((t+Fraction(str(self._origin)))/self._video_time_base) for t in times]
             self._has_audio = any(s.audio_timeline for s in sources)
@@ -980,6 +1091,14 @@ class Preview(QObject):
             self._width,self._height = document['canvas']['width'],document['canvas']['height']
             self._canvas_locked = any(s.has_video for s in sources)
             self._fps = next((s.fps for s in sources if s.has_video),30.)
+            if clock:
+                self._fps = clock['fps']
+                self._canvas_locked = clock['canvas_locked']
+                self._has_audio = clock['has_audio']
+                if self._has_audio and self._audio_timeline is None:
+                    # Keep the established silent AAC track when the removed
+                    # library entry was the only source that contained audio.
+                    self._audio_timeline = {'silence':True}
             self._project_path = path; self._pending_project = None
             self._importing = self._opening = False
             self._source_visuals = {}; self._waveform = None; self._thumbnails = ([],[])
@@ -1007,6 +1126,10 @@ class Preview(QObject):
         self._import_queue = []
         self._importing = False
         self._sources = ()
+        self._source_order = []
+        self._retained_catalog_clock = False
+        self._waveform_gain = 1.
+        self.editorSettingsChanged.emit()
         self._source_identities = {}
         self._source_visuals = {}
         self._saved_catalog = None
@@ -1057,6 +1180,7 @@ class Preview(QObject):
     def _receive_index(self,generation,kind,data):
         if generation != self._source_generation or self._closed: return
         if kind in ('waveform', 'thumbnails', 'visuals-error'):
+            if 0 not in self._source_order: return
             if kind == 'waveform': self._waveform = data
             elif kind == 'thumbnails': self._thumbnails = data
             if self._sources: self._store_source_visual(self._sources[0].path,kind,data)
@@ -1105,6 +1229,7 @@ class Preview(QObject):
             except (ValueError,KeyError,OverflowError) as exc:
                 self._receive_index(generation,'error',str(exc)); return
             self._sources = (source,)
+            self._source_order = [0]
             self._clips = Tracks(Clips(len(self._index),exact_times,Fraction(str(self._duration))))
             if self._pending_project:
                 path,document = self._pending_project
@@ -1125,6 +1250,7 @@ class Preview(QObject):
                     self.projectChanged.emit()
                     return
                 self._project_path = path
+                self._restore_editor_settings(document)
                 self._saved_timeline = project.timeline(self._clips)
                 self._timeline_origin = float(self._clips.origin)
                 self._remember_project(path)
@@ -1162,7 +1288,7 @@ class Preview(QObject):
         self.meterChanged.emit()
 
     def _request(self,position,play,endpoint=False):
-        if not self._path or self._opening: return
+        if (not self._path and self._clips is None) or self._opening: return
         self._seek_endpoint = endpoint
         position = max(0.,min(position,self._index[-1] if self._index else max(0.,self._duration-.001)))
         if self._index:
@@ -1256,9 +1382,24 @@ class Preview(QObject):
     @Slot(float)
     def setVolume(self,value):
         if not math.isfinite(value): return
-        self._volume = max(0.,min(2.,value))
+        value = max(0.,min(2.,value))
+        if value==self._volume: return
+        self._volume = value
         self._update_volume()
         self.changed.emit()
+        self.projectChanged.emit()
+
+    @Property(float,notify=editorSettingsChanged)
+    def waveformGain(self): return self._waveform_gain
+
+    @Slot(float)
+    def setWaveformGain(self,value):
+        if not math.isfinite(value): return
+        value = max(1.,min(256.,value))
+        if value==self._waveform_gain: return
+        self._waveform_gain = value
+        self.editorSettingsChanged.emit()
+        self.projectChanged.emit()
 
     def _update_volume(self):
         if self.sink: self.sink.setVolume(0. if self._muted else min(1.,self._volume))

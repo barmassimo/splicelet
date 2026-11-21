@@ -41,10 +41,12 @@ projects. Undo/redo applies to timeline edits; importing a library entry is not
 undone by Undo.
 
 Projects use `.splicelet` files. They save sources, clips, names, gaps, trim
-reserves, fades, lane link mode and canvas, but do not embed media. Keep sources
+reserves, fades, lane link mode, canvas, source order, listening volume and
+vertical waveform zoom, but do not embed media. Keep sources
 at their original paths: missing files or changed size/modification time prevent
 opening; relinking is not available. Reopening starts paused at the beginning;
-selection, playhead, zoom and undo history are not saved. There is no autosave.
+selection, playhead, horizontal timeline zoom and undo history are not saved.
+There is no autosave.
 
 ## Import and place sources
 
@@ -56,7 +58,12 @@ the supplied order. The first source is placed automatically; later sources
 enter the library without replacing the montage. Unsupported imports report an
 error while preserving existing clips.
 
-Drag a library row onto the timeline to place it. The insertion marker snaps to
+Drag a library row onto another row to reorder the Sources list without moving
+clips. The trash button above **+** removes a source from the project once
+neither lane uses it in a clip or trim reserve. To remove the last source, also
+remove any remaining timeline gaps. Removal discards the history needed to
+bring that source back.
+Drag a row onto the timeline to place it. The insertion marker snaps to
 boundaries; **Alt** bypasses snapping. Its **+** button or double-click appends
 it to the project. Reusing a source creates an independent clip. Placement never
 moves existing clips automatically; free space and partial two-clip overlaps
@@ -94,7 +101,7 @@ can still stutter; export retains all scheduled frames.
 
 The speaker mutes without forgetting its level. Listening volume ranges from
 **0–200%**, initially **100%**, marked by a red tick. Above 100% can distort
-loud material. Listening volume and mute do not affect exports or project data.
+loud material. Listening volume and mute do not affect exports. Mute is session-only.
 
 The compact L/R meter to the right of listening volume shows approximate stereo
 sample peaks from −60 to 0 dBFS, including timeline fades and overlaps, before
@@ -237,7 +244,7 @@ use releases it. Import/open resets Follow; it is not saved with projects.
 
 Thumbnails use sparse keyframes and can repeat at high zoom; they are approximate.
 The waveform combines both channels' source peaks before fades/listening gain.
-Vertical waveform zoom changes only the drawing and resets on import/open.
+Vertical waveform zoom changes only the drawing and is saved with the project.
 Background previews are cached under `artifacts/visuals` and never affect export.
 The timeline scrollbar is always visible and is disabled when the full timeline fits;
 narrow windows place scissors, zoom and listening controls in a second row.
@@ -259,6 +266,8 @@ remains silent. This adds no limiter/compression and does not guarantee true-pea
 or decoded AAC peak levels. Normalization does not affect preview or project data.
 
 **Continue** opens the save dialog. Cancelling either dialog creates no export.
+For an **All** export with one source, the suggested filename is the source
+name with its extension replaced by `_exported.mp4`.
 Export produces a new H.264/AAC MP4: CRF 18, veryfast, yuv420p, stereo 48 kHz AAC
 320 kbit/s, with one final lossy encode. Progress and **Cancel** appear below the
 timeline. Existing destinations and source aliases are rejected, including files

@@ -242,6 +242,13 @@ Source IDs reference local piece/reserve indexes, translated into the virtual gr
 on load. Times serialize as numerator/denominator pairs. Source identity checks
 absolute path, size and `mtime_ns`, not full hashes. Loading stages/indexes sources
 and validates ranges before replacing a valid session. No relinking or autosave.
+Optional editor settings store listening volume, vertical waveform gain and the
+display order of source IDs independently of the virtual grid.
+Removing an unused source keeps the running session's virtual coordinates stable
+and discards history that could restore references to it. Saving omits the
+removed source and remaps surviving IDs. The saved catalog clock retains the
+canvas lock, nominal frame rate, time base and audio stream availability.
+An empty source catalog can be saved when both lanes have zero duration.
 
 Project saves use a sibling temporary file, flush/fsync and atomic replacement.
 Existing project saves may be updated, but source paths/aliases are protected.

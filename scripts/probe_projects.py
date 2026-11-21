@@ -135,6 +135,9 @@ try:
     preview.seek(2); wait(lambda:not preview.busy)
     preview.cut()
     preview.setFade('audio_in','0.45')
+    preview.setVolume(.65)
+    preview.setWaveformGain(3.5)
+    assert Path(preview.exportFileUrl(False).toLocalFile()).name==f'{source_file.stem}_exported.mp4'
     expected = project.timeline(preview._clips)
     target = OUT/'gui.splicelet'
     assert preview.saveProjectAs(QUrl.fromLocalFile(str(target)))
@@ -142,11 +145,15 @@ try:
     preview.setFade('video_out','1.25')
     assert preview.projectDirty
     preview.undoCut(); assert not preview.projectDirty
+    preview.setVolume(.25)
+    preview.setWaveformGain(2)
+    assert preview.projectDirty
     preview.openProject(QUrl.fromLocalFile(str(target)))
     wait(lambda:preview.canSaveProject and not preview.busy)
     assert project.timeline(preview._clips)==expected and not preview.projectDirty
+    assert preview.volume==.65 and preview.waveformGain==3.5
     assert preview.projectName=='gui'
-    passed('controller_save_open_dirty_and_undo')
+    passed('controller_save_open_dirty_undo_listening_settings_and_export_suggestion')
     before = preview._clips
     preview.openProject(QUrl.fromLocalFile(str(OUT/'missing.splicelet')))
     assert errors and str(OUT/'missing-video.mkv') in errors[-1]

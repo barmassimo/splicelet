@@ -38,10 +38,18 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
   portable redistribution requires resolving the licensing issues in
   docs/DEVELOPMENT and a new user request to publish binaries.
 - The user has thoroughly tested and accepted exported audio/video quality.
-  Before making any change that could affect exported audio or video, notify
-  the user, explain the potential impact, and agree on the scope before proceeding.
-  This includes shared decoding, timing, source-range mapping, fades, resampling,
-  rendering and encoding settings, even when the requested feature is for preview.
+  If a change could alter how audio or video is rendered or encoded for the
+  same timeline, export range and settings, notify the user, explain the
+  potential impact, and agree on the scope before proceeding. This includes
+  shared decoding, timing, source-range
+  mapping, fade processing, resampling, rendering and encoding settings, even
+  when the requested feature is for preview.
+  A requested editing interaction can change the timeline content by combining
+  or automating existing edits. When equivalent edits produce the same timeline
+  and use the same export processing, separate export-quality approval is
+  unnecessary. For example, placing audio and video
+  together can produce the same timeline as placing each lane individually at
+  the same position with the same source ranges.
 - Keep editing/time logic independent of Qt/QML and the playback backend.
   Preview and export must interpret the same source ranges and fade definitions.
 - Respect source PTS/time bases and audio sample positions; do not derive exact
@@ -92,7 +100,7 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
   when it is optional and leaving it unset preserves existing default behavior.
   Internal implementation changes alone do not warrant MAJOR when user behavior
   and requirements remain compatible. Apply these criteria before the MINOR/PATCH
-  rules; retain the existing approval requirements for changes affecting export.
+  rules; retain the export-quality approval requirements above.
 - As part of the requested release, update the version and CHANGELOG, commit
   the release metadata and create the matching `vMAJOR.MINOR.PATCH` tag, including
   exactly the suffix requested by the user, on the release commit. Never overwrite

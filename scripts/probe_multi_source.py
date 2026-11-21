@@ -131,6 +131,18 @@ try:
     assert not errors,errors
     assert preview.duration==2 and (preview._width,preview._height)==(320,180)
     assert len(preview.importedSources)==4
+    QTest.qWait(100)
+    first,last = item_named('sourceEntry0'),item_named('sourceEntry2')
+    start = first.mapToScene(QPointF(20,20)).toPoint()
+    end = last.mapToScene(QPointF(20,20)).toPoint()
+    timeline_before = project.timeline(preview._clips)
+    QTest.mousePress(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,start)
+    QTest.mouseMove(window,(start+end)/2)
+    QTest.mouseMove(window,end)
+    QTest.mouseRelease(window,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier,end)
+    wait(lambda:[s['index'] for s in preview.importedSources]==[1,2,0,3])
+    assert project.timeline(preview._clips)==timeline_before
+    passed('dropping_source_on_another_row_reorders_library_without_moving_clips')
     assert preview._clips.linked
     preview.appendSource(1); idle()
     preview.appendSource(2); idle()
@@ -230,6 +242,7 @@ try:
     before = project.timeline(preview._clips)
     preview.openProject(QUrl.fromLocalFile(str(path))); idle()
     assert not errors and not preview.projectDirty and before==project.timeline(preview._clips),errors
+    assert [s['index'] for s in preview.importedSources]==[1,2,0,3]
     assert (preview._width,preview._height)==(320,180)
     assert np.max(abs(read('audio',preview.export_spec(False))-pcm))<2e-6
     # Invalid timeline data must fail after indexing without replacing this session.
@@ -322,6 +335,55 @@ try:
     assert outcome=='cancelled' and not cancelled_path.exists(),message
     assert not list(run.glob('.video-export-*'))
     passed('unlinked_insertion_is_lane_local_and_multi_source_cancel_cleans_temporaries')
+
+    preview.open_path(str(red)); idle()
+    preview.importUrls([QUrl.fromLocalFile(str(silent))]); idle()
+    preview.appendSource(1); idle()
+    preview.unlinkAudio(); idle()
+    click(item_named('removeSource0'))
+    assert [s['index'] for s in preview.importedSources]==[0,1]
+    preview.selectClip(0)
+    preview.deleteSelected(); idle()
+    preview.removeSource(0)
+    assert [s['index'] for s in preview.importedSources]==[0,1]  # Audio still uses it.
+    preview.selectClip(1000000)
+    preview.deleteSelected(); idle()
+    before = preview.export_spec(False)
+    click(item_named('removeSource0')); idle()
+    assert [s['index'] for s in preview.importedSources]==[1] and preview.projectDirty
+    assert preview.canUndo is False
+    assert Path(preview.exportFileUrl(False).toLocalFile()).name=='silent_exported.mp4'
+    removed = run/'removed.splicelet'
+    assert preview.saveProjectAs(QUrl.fromLocalFile(str(removed)))
+    assert not preview.projectDirty
+    assert [s['path'] for s in project.read(removed)['sources']]==[str(silent)]
+    preview.openProject(QUrl.fromLocalFile(str(removed))); idle()
+    assert not preview.projectDirty
+    after = preview.export_spec(False)
+    assert (before.start,before.end,before.fps,before.time_base,before.width,before.height)==(
+        after.start,after.end,after.fps,after.time_base,after.width,after.height)
+    assert np.array_equal(read('audio',before),read('audio',after))
+    assert [(stamp,pixels(image).tobytes()) for _,stamp,image in read('video',before)]==[
+        (stamp,pixels(image).tobytes()) for _,stamp,image in read('video',after)]
+    export(after,'removed.mp4')
+    window.grabWindow().save(str(run/'source-trash.png'))
+    passed('trash_requires_both_lanes_clear_and_saved_removal_preserves_timeline_render')
+
+    preview.open_path(str(red)); idle()
+    preview.selectClip(0)
+    preview.deleteSelected(); idle()
+    preview.removeSource(0)
+    assert len(preview.importedSources)==1 and preview.duration==2
+    preview.removeGap(0); idle()
+    preview.removeSource(0); idle()
+    assert not preview.importedSources and not preview.canUndo and preview.duration==0
+    empty = run/'empty.splicelet'
+    assert preview.saveProjectAs(QUrl.fromLocalFile(str(empty)))
+    preview.openProject(QUrl.fromLocalFile(str(empty))); idle()
+    assert not preview.importedSources and preview.canSaveProject and not preview.projectDirty
+    preview.importUrls([QUrl.fromLocalFile(str(blue))]); idle()
+    assert len(preview.importedSources)==1 and preview.projectName=='empty' and preview.duration==2
+    passed('last_source_removal_roundtrips_an_empty_project_and_allows_import')
 
     # A failed later import leaves the existing project and its history usable.
     bad = run/'bad.bin'; bad.write_bytes(b'not a source file')

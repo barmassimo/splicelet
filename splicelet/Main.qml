@@ -736,7 +736,7 @@ ApplicationWindow {
                                 Label { text: "Imported sources"; Layout.fillWidth: true; font.weight: Font.DemiBold }
                                 SpliceletButton { text: "Import"; enabled: !preview.exporting && !preview.busy; onClicked: picker.open() }
                             }
-                            Label { text: preview.importing ? "Preparing sources…" : "Drag to the timeline, or add to the end."; color: theme.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
+                            Label { text: preview.importing ? "Preparing sources…" : "Drag to reorder or place on the timeline."; color: theme.muted; font.pixelSize: 12; wrapMode: Text.WordWrap; Layout.fillWidth: true }
                             ListView {
                                 id: sourceList
                                 objectName: "sourceList"
@@ -749,10 +749,20 @@ ApplicationWindow {
                                     required property var modelData
                                     readonly property int sourceIndex: modelData.index
                                     objectName: "sourceEntry"+sourceIndex
-                                    width: sourceList.width; height: 77; radius: 8
-                                    color: sourceMouse.containsMouse ? theme.hover : theme.clip
+                                    width: sourceList.width; height: 64; radius: 8
+                                    color: reorderDrop.containsDrag ? theme.selected : sourceMouse.containsMouse ? theme.hover : theme.clip
+                                    DropArea {
+                                        id: reorderDrop
+                                        anchors.fill: parent
+                                        keys: ["splicelet-source"]
+                                        onDropped: function(drop) {
+                                            if (!drop.source || drop.source.sourceIndex===sourceEntry.sourceIndex) return
+                                            Qt.callLater(preview.moveSource,drop.source.sourceIndex,sourceEntry.sourceIndex)
+                                            drop.accept()
+                                        }
+                                    }
                                     Column {
-                                        x: 8; y: 8; width: parent.width-16; spacing: 4
+                                        x: 8; y: 8; width: parent.width-46; spacing: 4
                                         Label { width: parent.width; text: sourceEntry.modelData.name; elide: Text.ElideMiddle; font.weight: Font.DemiBold; font.pixelSize: 12 }
                                         Label { text: sourceEntry.modelData.detail; color: theme.muted; font.pixelSize: 11 }
                                         Label { text: sourceEntry.modelData.kind + " · " + sourceEntry.modelData.durationText; color: theme.muted; font.pixelSize: 11 }
@@ -782,6 +792,35 @@ ApplicationWindow {
                                         ToolTip.visible: containsMouse && !dragging
                                     }
                                     SpliceletButton {
+                                        objectName: "removeSource"+sourceEntry.sourceIndex
+                                        anchors.right: parent.right; anchors.bottom: appendButton.top; anchors.rightMargin: 5; anchors.bottomMargin: 4
+                                        implicitWidth: 28; implicitHeight: 24; padding: 3
+                                        enabled: appendButton.enabled
+                                        onClicked: preview.removeSource(sourceEntry.sourceIndex)
+                                        ToolTip.text: "Remove source"; ToolTip.visible: hovered
+                                        Accessible.name: "Remove source"
+                                        contentItem: Canvas {
+                                            id: trashIcon
+                                            Connections { target: theme; function onDarkChanged() { trashIcon.requestPaint() } }
+                                            Connections { target: appendButton; function onEnabledChanged() { trashIcon.requestPaint() } }
+                                            onPaint: {
+                                                const c=getContext("2d")
+                                                c.reset()
+                                                c.translate(width/2-8,height/2-8)
+                                                c.strokeStyle=appendButton.enabled ? theme.text : theme.disabledText
+                                                c.lineWidth=1.3
+                                                c.beginPath()
+                                                c.moveTo(2,4); c.lineTo(14,4)
+                                                c.moveTo(6,4); c.lineTo(6,2); c.lineTo(10,2); c.lineTo(10,4)
+                                                c.moveTo(4,4); c.lineTo(5,14); c.lineTo(11,14); c.lineTo(12,4)
+                                                c.moveTo(7,7); c.lineTo(7,11)
+                                                c.moveTo(9,7); c.lineTo(9,11)
+                                                c.stroke()
+                                            }
+                                        }
+                                    }
+                                    SpliceletButton {
+                                        id: appendButton
                                         objectName: "appendSource"+sourceEntry.sourceIndex
                                         anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 5
                                         text: "+"; implicitWidth: 28; implicitHeight: 24

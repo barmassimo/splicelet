@@ -12,7 +12,7 @@ Item {
     implicitHeight: scroll.y+scroll.height+6
     readonly property real audioLaneY: 96
     readonly property real audioLaneHeight: 44
-    property real waveformGain: 1
+    readonly property real waveformGain: preview.waveformGain
     clip: true
     readonly property real inset: 12
     readonly property real span: Math.max(1,width-2*inset)
@@ -165,7 +165,7 @@ Item {
     Connections {
         target: preview
         function onEditChanged() {
-            if (!preview.indexedReady) { timeline.followEnabled=false; timeline.viewDuration=0; timeline.viewStart=0; timeline.waveformGain=1 }
+            if (!preview.indexedReady) { timeline.followEnabled=false; timeline.viewDuration=0; timeline.viewStart=0 }
             else if (timeline.followEnabled) timeline.followPlayhead()
             else timeline.viewStart=timeline.clampView(timeline.viewStart)
         }
@@ -662,7 +662,7 @@ Item {
         if (wheel.modifiers & Qt.ControlModifier) {
             zoom(Math.pow(1.35,steps),x)
         } else if ((wheel.modifiers & Qt.ShiftModifier) && preview.hasAudio && y>=audioLaneY && y<audioLaneY+audioLaneHeight) {
-            waveformGain=Math.max(1,Math.min(256,waveformGain*Math.pow(1.35,steps)))
+            preview.setWaveformGain(waveformGain*Math.pow(1.35,steps))
         } else if (pixels.x || pixels.y) {
             followEnabled=false
             viewStart=clampView(viewStart-(pixels.x || pixels.y)*secondsPerPixel)

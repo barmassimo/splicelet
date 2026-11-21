@@ -6,6 +6,16 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+### Added
+
+- Reorder imported sources by dragging their rows. Projects remember source
+  order, listening volume and vertical waveform zoom.
+- Remove unused imported sources using the trash button in the Sources list.
+
+### Changed
+
+- Suggest `<source>_exported.mp4` when exporting the whole project with one source.
+
 ## 1.9.0 — 2026-11-18
 
 ### Added
