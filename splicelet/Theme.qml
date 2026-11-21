@@ -5,6 +5,7 @@ QtObject {
     readonly property color window: dark ? "#171c24" : "#f5f7fb"
     readonly property color text: dark ? "#e3eaf3" : "#243248"
     readonly property color muted: dark ? "#a8b6c8" : "#59687b"
+    readonly property color error: dark ? "#ff9292" : "#ad2727"
     readonly property color surface: dark ? "#252e3b" : "#ffffff"
     readonly property color disabled: dark ? "#75859a" : "#8998aa"
     readonly property color disabledText: dark ? "#8e9eb2" : "#69778a"

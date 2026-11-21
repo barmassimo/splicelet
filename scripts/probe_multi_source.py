@@ -125,7 +125,11 @@ try:
         drop = QDropEvent(QPointF(target),actions,mime,Qt.MouseButton.LeftButton,Qt.KeyboardModifier.NoModifier)
         QCoreApplication.sendEvent(window,drop)
         assert drop.isAccepted() and drop.dropAction()==Qt.DropAction.CopyAction
+        status = item_named('statusText')
+        assert status.property('fullStatus').startswith(f'Importing {source_file.name}…')
         wait(lambda:len(preview._sources)==count); idle()
+        assert status.property('fullStatus').startswith(f'Added to Sources: {source_file.name}')
+    window.grabWindow().save(str(run/'external-import-status.png'))
     passed('external_file_drops_preview_timeline_flac_and_side_panel_copy_only')
     wait(lambda:len(preview._sources)==4); idle()
     assert not errors,errors
@@ -356,7 +360,11 @@ try:
     before = preview.export_spec(False)
     click(item_named('removeSource0')); idle()
     assert [s['index'] for s in preview.importedSources]==[1] and preview.projectDirty
-    assert preview.canUndo is False
+    assert preview.canUndo
+    preview.undoCut(); idle()
+    assert [s['index'] for s in preview.importedSources]==[0,1] and not preview._clips.audio.selected_ids
+    preview.redoCut(); idle()
+    assert [s['index'] for s in preview.importedSources]==[1]
     assert Path(preview.exportFileUrl(False).toLocalFile()).name=='silent_exported.mp4'
     removed = run/'removed.splicelet'
     assert preview.saveProjectAs(QUrl.fromLocalFile(str(removed)))
@@ -375,20 +383,58 @@ try:
     passed('trash_requires_both_lanes_clear_and_saved_removal_preserves_timeline_render')
 
     preview.open_path(str(red)); idle()
+    export_action = window.findChild(QObject,'exportAction')
+    assert export_action.property('enabled')
     preview.selectClip(0)
     preview.deleteSelected(); idle()
-    preview.removeSource(0)
-    assert len(preview.importedSources)==1 and preview.duration==2
-    preview.removeGap(0); idle()
+    assert not export_action.property('enabled') and preview.duration==0
+    rejected = run/'gap-only.mp4'
+    preview.exportClip(QUrl.fromLocalFile(str(rejected)),False)
+    assert preview.exportStatusError and 'Add a clip' in preview.exportStatus
+    assert not preview.exporting and not rejected.exists()
+    preview.undoCut(); idle()
+    assert preview.duration==2 and export_action.property('enabled')
+    preview.redoCut(); idle()
+    assert preview.duration==0 and not export_action.property('enabled')
     preview.removeSource(0); idle()
-    assert not preview.importedSources and not preview.canUndo and preview.duration==0
+    assert not preview.importedSources and preview.canUndo and preview.duration==0
+    wait(lambda:not preview.visualsStatus)
+    missing = red.with_name('temporarily-missing.mkv')
+    red.rename(missing)
+    try:
+        history = preview._clips.undo_stack.copy(),preview._clips.redo_stack.copy()
+        preview.undoCut()
+        assert preview.statusError and f'Cannot restore {red.name}' in preview.status
+        assert not preview.importedSources and preview.duration==0
+        assert history==(preview._clips.undo_stack,preview._clips.redo_stack)
+    finally:
+        missing.rename(red)
+    original_stat = red.stat()
+    try:
+        os.utime(red,ns=(original_stat.st_atime_ns,original_stat.st_mtime_ns+2_000_000_000))
+        preview.undoCut()
+        assert preview.statusError and 'has changed' in preview.status
+        assert not preview.importedSources and history==(preview._clips.undo_stack,preview._clips.redo_stack)
+    finally:
+        os.utime(red,ns=(original_stat.st_atime_ns,original_stat.st_mtime_ns))
+    preview.undoCut(); idle()
+    assert len(preview.importedSources)==1 and preview.duration==0
+    preview.undoCut(); idle()
+    assert preview.duration==2 and export_action.property('enabled')
+    preview.redoCut(); idle()
+    assert len(preview.importedSources)==1 and preview.duration==0
+    preview.redoCut(); idle()
+    assert not preview.importedSources and preview.canUndo
     empty = run/'empty.splicelet'
     assert preview.saveProjectAs(QUrl.fromLocalFile(str(empty)))
     preview.openProject(QUrl.fromLocalFile(str(empty))); idle()
     assert not preview.importedSources and preview.canSaveProject and not preview.projectDirty
+    assert preview.duration==0 and not export_action.property('enabled')
     preview.importUrls([QUrl.fromLocalFile(str(blue))]); idle()
     assert len(preview.importedSources)==1 and preview.projectName=='empty' and preview.duration==2
-    passed('last_source_removal_roundtrips_an_empty_project_and_allows_import')
+    assert export_action.property('enabled')
+    passed('deleting_last_clip_clears_gaps_with_undo_redo_disables_export_and_allows_source_removal')
+    passed('source_removal_undo_preserves_timeline_history_and_can_retry_when_file_returns')
 
     # A failed later import leaves the existing project and its history usable.
     bad = run/'bad.bin'; bad.write_bytes(b'not a source file')
@@ -403,7 +449,9 @@ try:
     assert len(preview._sources)==1 and preview._sources[0].path==str(red)
     preview.open_path(str(bad)); idle()
     preview.importUrls([QUrl.fromLocalFile(str(bad)),QUrl.fromLocalFile(str(blue))])
+    assert preview.importStatus==f'Importing {bad.name}… · Queued: {blue.name}'
     wait(lambda:len(preview._sources)==1 and preview._sources[0].path==str(blue)); idle()
+    assert preview.importStatus==f'Added to Sources: {blue.name}'
     errors.clear()
     passed('failed_import_preserves_montage_and_replacement_discards_stale_source_jobs')
 

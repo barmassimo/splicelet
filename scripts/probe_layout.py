@@ -483,12 +483,20 @@ try:
     slider=window.findChild(QQuickItem,'volumeSlider')
     assert slider.mapToScene(QPointF(slider.width(),0)).x()<=window.width()
     window.grabWindow().save(str(OUT/'layout-minimum.png'))
-    preview._exporting=True; preview._export_progress=.42; preview._export_status='Exporting video…'
-    preview._status='Clip duplicated into the adjacent space.'; preview.exportChanged.emit(); preview.changed.emit()
+    preview._exporting=True
+    preview._export_updated(.42,'Exporting video…')
+    preview._set_status('Clip duplicated into the adjacent space.')
+    preview.changed.emit()
     QTest.qWait(100)
     window.grabWindow().save(str(OUT/'status-export.png'))
-    assert window.findChild(QQuickItem,'statusText').property('text').startswith('Exporting video…')
-    preview._exporting=False
+    status = window.findChild(QQuickItem,'statusText')
+    assert status.property('text').startswith('Exporting video…')
+    preview._export_finished('error','Failed to export A & B.mp4')
+    assert '<b><font color=' in status.property('text')
+    assert 'A &amp; B.mp4</font></b> · Clip duplicated' in status.property('text')
+    assert 'A & B.mp4' in status.property('fullStatus')
+    preview._export_finished('cancelled','Export cancelled.')
+    assert status.property('text').startswith('Export cancelled.')
     passed('view_menu_transport_alignment_minimum_width_and_unified_export_status')
 finally:
     preview.close()

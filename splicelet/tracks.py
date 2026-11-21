@@ -16,6 +16,15 @@ class Tracks:
         self.linked = linked
         self.lane = 'video'
         self.undo_stack,self.redo_stack = [],[]
+        self._clear_empty_bounds()
+
+    @property
+    def has_clips(self): return bool(self.video.clips or self.audio.clips)
+
+    def _clear_empty_bounds(self):
+        if not self.has_clips:
+            for model in (self.video,self.audio):
+                model.origin = model.extent = Fraction(0)
 
     @property
     def active(self): return getattr(self,self.lane)
@@ -208,14 +217,17 @@ class Tracks:
     def duplicate(self,index): return self._edit('duplicate',index)
     def join(self): return self.can_join and self._edit('join')
     def delete_selected(self):
-        if not self.mixed_selection: return self._edit('delete_selected')
-        self.undo_stack.append(self.snapshot()); self.redo_stack.clear()
-        for model in (self.video,self.audio):
-            model.delete_selected()
-            model.undo_stack.clear(); model.redo_stack.clear()
+        if self.mixed_selection:
+            self.undo_stack.append(self.snapshot()); self.redo_stack.clear()
+            for model in (self.video,self.audio):
+                model.delete_selected()
+                model.undo_stack.clear(); model.redo_stack.clear()
+        elif not self._edit('delete_selected'):
+            return False
+        self._clear_empty_bounds()
         return True
     def remove_gap(self,index): return self._edit('remove_gap',index)
-    def add_space(self,side,seconds): return self._edit('add_space',side,seconds)
+    def add_space(self,side,seconds): return self.has_clips and self._edit('add_space',side,seconds)
     def rename(self,text): return self._edit('rename',text)
     def set_fade(self,key,value): return self._edit('set_fade',key,value)
     def frames(self,fps=30): return self.video.frames(fps)

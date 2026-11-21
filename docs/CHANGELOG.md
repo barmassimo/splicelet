@@ -11,6 +11,7 @@ independent of each other and of the public Git history.
 - Reorder imported sources by dragging their rows. Projects remember source
   order, listening volume and vertical waveform zoom.
 - Remove unused imported sources using the trash button in the Sources list.
+- Undo and redo source removal while retaining earlier timeline edits.
 
 ### Changed
 
@@ -18,6 +19,10 @@ independent of each other and of the public Git history.
   including in Unlinked mode.
 
 - Suggest `<source>_exported.mp4` when exporting the whole project with one source.
+- Highlight error messages in red, including blocked source removal.
+- Show the filename during import and confirm when it is added to Sources.
+- Clear the remaining gap when the last timeline clip is deleted and disable
+  export until the timeline contains a clip.
 
 ## 1.9.0 — 2026-11-18
 

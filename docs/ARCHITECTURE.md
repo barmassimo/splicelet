@@ -91,7 +91,9 @@ falling back to microseconds if its denominator exceeds FFmpeg's integer limit.
 
 ## Editing invariants
 
-Delete leaves space; only explicit gap removal shifts later clips. Unlinked gap
+Delete leaves space while either lane contains a clip. Deleting the final clip
+clears the timeline bounds as part of the same edit. Only explicit gap removal
+shifts later clips. Unlinked gap
 closure affects its lane without truncating the other lane. Moves and duplication
 never ripple outsiders. Group movement requires consecutive selected timeline
 indices and preserves internal gaps. Trims respect source reserves and retain at
@@ -246,11 +248,13 @@ absolute path, size and `mtime_ns`, not full hashes. Loading stages/indexes sour
 and validates ranges before replacing a valid session. No relinking or autosave.
 Optional editor settings store listening volume, vertical waveform gain and the
 display order of source IDs independently of the virtual grid.
-Removing an unused source keeps the running session's virtual coordinates stable
-and discards history that could restore references to it. Saving omits the
-removed source and remaps surviving IDs. The saved catalog clock retains the
+Removing an unused source keeps its virtual coordinates and indexes available
+for Undo. Source removals are interleaved with timeline edits in session
+history. Undo validates the file identity before restoring the catalog entry.
+Saving omits removed sources and remaps surviving IDs. The saved catalog clock retains the
 canvas lock, nominal frame rate, time base and audio stream availability.
-An empty source catalog can be saved when both lanes have zero duration.
+Projects saved without clips reopen with zero timeline duration. Export requires
+at least one clip on either lane.
 
 Project saves use a sibling temporary file, flush/fsync and atomic replacement.
 Existing project saves may be updated, but source paths/aliases are protected.

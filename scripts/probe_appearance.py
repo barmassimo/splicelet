@@ -102,6 +102,10 @@ try:
     click_item(source_tab)
     assert navigation.property('currentIndex')==1
     window.grabWindow().save(str(OUT/'light-source.png'))
+    click_item(item_named('removeSource0'))
+    assert preview.statusError and 'trim reserves' in preview.status
+    assert '<b><font color="#ad2727">' in status_text.property('text')
+    window.grabWindow().save(str(OUT/'light-error-status.png'))
     click_item(properties_tab)
     assert navigation.property('currentIndex')==0
     preview.selectClip(0,False,False)
@@ -138,6 +142,10 @@ try:
     click_item(item_named('menuCommand_darkThemeAction'))
     assert preview.darkTheme and action.property('checked') and not menu.property('opened')
     assert window.property('color').name()=='#171c24'
+    preview.removeSource(0)
+    QTest.qWait(80)
+    assert '<b><font color="#ff9292">' in status_text.property('text')
+    window.grabWindow().save(str(OUT/'dark-error-status.png'))
     window.grabWindow().save(str(OUT/'dark.png'))
     restored=Preview(FrameProvider(),muted=True)
     assert restored.darkTheme

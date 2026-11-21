@@ -1,5 +1,5 @@
 from bisect import bisect_right
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 import math
 import numpy as np
 from collections import OrderedDict
@@ -22,6 +22,14 @@ from . import project
 from .visuals import build_visuals, waveform_columns, source_at
 from .sources import catalog_entry, source_for
 from .audio_meter import AudioMeter
+
+
+@dataclass(frozen=True)
+class SourceRemoval:
+    index: int
+    position: int
+    retained_clock: bool
+    audio_timeline: dict | None
 
 
 class FrameKeys(QObject):
@@ -88,6 +96,7 @@ class Preview(QObject):
     appearanceChanged = Signal()
     editorSettingsChanged = Signal()
     sourceChanged = Signal()
+    importStatusChanged = Signal()
     sourceIndexed = Signal(int,str,object)
     meterChanged = Signal()
 
@@ -109,6 +118,11 @@ class Preview(QObject):
         self._source_visuals = {}
         self._saved_catalog = None
         self._import_queue = []
+        self._active_import_path = ''
+        self._import_status = ''
+        self._import_status_timer = QTimer(self)
+        self._import_status_timer.setSingleShot(True)
+        self._import_status_timer.timeout.connect(lambda:self._set_import_status(''))
         self._importing = False
         self._import_cancel = threading.Event()
         self._canvas_locked = False
@@ -126,6 +140,7 @@ class Preview(QObject):
         self._origin = 0.
         self._playing = False
         self._status = 'Ready'
+        self._status_error = False
         self._index = []
         self._source_index = []
         self._source_duration = 0.
@@ -139,6 +154,7 @@ class Preview(QObject):
         self._exporting = False
         self._export_progress = 0.
         self._export_status = ''
+        self._export_status_error = False
         self.export_task = ExportTask(self)
         self.export_task.updated.connect(self._export_updated,Qt.ConnectionType.QueuedConnection)
         self.export_task.finished.connect(self._export_finished,Qt.ConnectionType.QueuedConnection)
@@ -231,6 +247,29 @@ class Preview(QObject):
     @Property(bool,notify=sourceChanged)
     def importing(self): return self._importing
 
+    @Property(str,notify=importStatusChanged)
+    def importStatus(self):
+        if not self._import_queue: return self._import_status
+        queued = f'Queued: {Path(self._import_queue[0]).name}'
+        if len(self._import_queue)>1: queued += f' (+{len(self._import_queue)-1} more)'
+        return f'{self._import_status} · {queued}' if self._import_status else queued
+
+    def _set_import_status(self,message,complete=False):
+        self._import_status_timer.stop()
+        self._import_status = message
+        if complete: self._import_status_timer.start(5000)
+        self.importStatusChanged.emit()
+
+    def _begin_import(self,path):
+        self._active_import_path = path
+        self._set_import_status(f'Importing {Path(path).name}…')
+
+    def _finish_import(self,succeeded):
+        path = self._active_import_path
+        self._active_import_path = ''
+        if path:
+            self._set_import_status(f'Added to Sources: {Path(path).name}' if succeeded else '',complete=succeeded)
+
     @Property('QVariantList',notify=sourceChanged)
     def importedSources(self):
         return [{'index':i,'name':Path(s.path).name,'path':s.path,'duration':float(s.duration)-float(self._source_index[s.first]-s.offset),'durationText':self.format_time(float(s.duration)),
@@ -254,52 +293,32 @@ class Preview(QObject):
         def uses(clip):
             return any(a<source.end and b>source.first
                        for a,b in (*clip.pieces,*clip.left_reserve,*clip.right_reserve)) or any(map(uses,clip.components))
-        def referenced(lanes):
-            return any(uses(clip) for clips in lanes for clip in clips)
-        if referenced(model.clips for _,model in self._lanes()):
-            self._status = 'Remove all timeline clips and trim reserves that use this source first.'
-        elif len(self._source_order)==1 and self._duration>0:
-            self._status = 'Remove the remaining timeline gaps before removing the last source.'
+        if any(uses(clip) for _,model in self._lanes() for clip in model.clips):
+            self._set_status('Remove all timeline clips and trim reserves that use this source first.',error=True)
+            self.changed.emit()
+            return
+        entry = SourceRemoval(index,self._source_order.index(index),self._retained_catalog_clock,self._audio_timeline)
+        self._clips.undo_stack.append(entry)
+        self._clips.redo_stack.clear()
+        self._apply_source_removal(entry,restore=False)
+
+    def _apply_source_removal(self,entry,restore):
+        # Keep virtual coordinates and cached indexes available for timeline history.
+        if restore:
+            self._audio_timeline = (self._audio_timeline if self._source_order else None) or entry.audio_timeline
+            if entry.index not in self._source_order: self._source_order.insert(entry.position,entry.index)
+            self._retained_catalog_clock = entry.retained_clock or len(self._source_order)!=len(self._sources)
+            self._set_status('Source restored to the project.')
         else:
-            # Keep virtual coordinates stable. Discard history up to the nearest
-            # state that would bring a reference to the removed source back.
-            for stack in (self._clips.undo_stack,self._clips.redo_stack):
-                boundary = next((i for i in range(len(stack)-1,-1,-1)
-                                 if referenced((stack[i][0][0],stack[i][1][0]))),-1)
-                del stack[:boundary+1]
-            self._source_order.remove(index)
-            if index==0:
-                self._index_cancel.set()
-                self._waveform = None
-                self._thumbnails = ([],[])
-                self._visual_status = ''
-                self.visualsChanged.emit()
-            if not self._source_order:
-                self._import_cancel.set()
-                self._import_cancel = threading.Event()
-                self._source_generation += 1
-                self._clips.undo_stack.clear()
-                self._clips.redo_stack.clear()
-                self._sources = ()
-                self._source_index = []
-                self._video_pts = []
-                self._origin = self._source_duration = 0.
-                self._has_audio = False
-                self._audio_timeline = None
-                for _,model in self._lanes():
-                    model.sources = model.times = ()
-                    model.edges = (Fraction(0),)
-                    model.frame_count = 0
-                    model.source_duration = Fraction(0)
+            if entry.index in self._source_order: self._source_order.remove(entry.index)
             self._retained_catalog_clock = True
-            if source.path==self._path:
-                self._path = self._sources[min(self._source_order)].path if self._source_order else ''
-                self._name = Path(self._path).name if self._path else ''
-            self._source_visuals.pop(source.path,None)
-            self._status = 'Source removed from the project.'
-            self.sourceChanged.emit()
-            self.editChanged.emit()
-            self.projectChanged.emit()
+            self._set_status('Source removed from the project.')
+        self._path = self._sources[min(self._source_order)].path if self._source_order else ''
+        self._name = Path(self._path).name if self._path else ''
+        self._has_audio = bool(self._source_order and self._audio_timeline)
+        self.sourceChanged.emit()
+        self.editChanged.emit()
+        self.projectChanged.emit()
         self.changed.emit()
 
     def _source_sources(self):
@@ -307,15 +326,14 @@ class Preview(QObject):
             return tuple(self._sources[i] for i in sorted(self._source_order))
         return self._sources if len(self._sources)>1 or (self._sources and not self._sources[0].has_video) else ()
 
-    def _store_source_visual(self,path,event,value):
-        if all(self._sources[i].path!=path for i in self._source_order): return
-        self._source_visuals.setdefault(path,{})[event] = value
+    def _store_source_visual(self,source,event,value):
+        self._source_visuals.setdefault(source.first,{})[event] = value
         self._bound_waveforms()
 
     def _bound_waveforms(self):
         # Keep every source visible while coarsening very large libraries to a
         # shared 128 MiB peak-pyramid budget. Disk caches retain full detail.
-        budget = max(16,128*1024*1024//max(1,len(self._source_order)))
+        budget = max(16,128*1024*1024//max(1,len(self._sources)))
         for values in self._source_visuals.values():
             wave = values.get('waveform')
             if wave is None: continue
@@ -324,7 +342,7 @@ class Preview(QObject):
                 step *= 2; levels = levels[1:]
             values['waveform'] = (step,levels)
         if self._sources and self._waveform is not None:
-            self._waveform = self._source_visuals.get(self._sources[0].path,{}).get('waveform',self._waveform)
+            self._waveform = self._source_visuals.get(self._sources[0].first,{}).get('waveform',self._waveform)
 
     def _remember_project(self,path):
         self._recent = [path]+[item for item in self._recent if item.casefold()!=path.casefold()]
@@ -346,7 +364,7 @@ class Preview(QObject):
             return
         self.open_path(data['sources'][0]['path'])
         self._pending_project = (path,data)
-        self._status = 'Opening project…'
+        self._set_status('Opening project…')
         self.changed.emit()
         self.projectChanged.emit()
 
@@ -364,8 +382,9 @@ class Preview(QObject):
         try:
             indices = sorted(self._source_order)
             paths = {self._sources[i].path for i in indices}
-            for source in paths:
-                identity = self._source_identities[source]
+            for index in indices:
+                source = self._sources[index].path
+                identity = self._source_identities[index]
                 if project.source_info(source)!=identity: raise ValueError(f'Imported source has changed:\n{source}')
             data = project.document(self._clips,self._path,{'width':self._width,'height':self._height},
                                     indices if self._retained_catalog_clock else None)
@@ -376,7 +395,7 @@ class Preview(QObject):
                 editor['catalog_clock'] = {'fps':self._fps,'base':self._video_time_base.denominator,
                                            'has_audio':self._has_audio,'canvas_locked':self._canvas_locked}
             data['editor'] = editor
-            project.write(path,data,self._source_identities.keys()-paths)
+            project.write(path,data,{source.path for source in self._sources}-paths)
         except (OSError,ValueError) as exc:
             self.projectError.emit(f'Cannot save project:\n{path}\n\n{exc}')
             return False
@@ -392,6 +411,12 @@ class Preview(QObject):
     def detail(self): return self._detail
     @Property(str, notify=changed)
     def status(self): return self._status
+    @Property(bool, notify=changed)
+    def statusError(self): return self._status_error
+
+    def _set_status(self,message,error=False):
+        self._status,self._status_error = message,error
+
     @Property(float, notify=changed)
     def duration(self): return self._duration
     @Property(float, notify=changed)
@@ -498,7 +523,7 @@ class Preview(QObject):
             columns = min(4096,max(0,columns))
             result = np.zeros((columns,2),np.float32)
             for part,source in self._visual_source_parts(index):
-                wave = self._source_visuals.get(source.path,{}).get('waveform')
+                wave = self._source_visuals.get(source.first,{}).get('waveform')
                 if wave is None: continue
                 step,levels = wave
                 values = waveform_columns(levels,step,[(part.start,part.end,part.source_start-float(source.offset))],start,end,columns)
@@ -523,7 +548,7 @@ class Preview(QObject):
                 sample = max(start,position)+min(spacing/2,(end-max(start,position))/2)
                 for part,source in parts:
                     if not part.start<=sample<part.end: continue
-                    times,files = self._source_visuals.get(source.path,{}).get('thumbnails',([],[]))
+                    times,files = self._source_visuals.get(source.first,{}).get('thumbnails',([],[]))
                     if not times: break
                     stamp = part.source_start+sample-part.start-float(source.offset)
                     at = max(0,min(len(times)-1,bisect_right(times,stamp)-1))
@@ -579,7 +604,7 @@ class Preview(QObject):
     @Slot()
     def unlinkAudio(self):
         if self.canUnlink and self._clips.unlink():
-            self._status = 'Audio unlinked. Audio and video can now be edited independently.'
+            self._set_status('Audio unlinked. Audio and video can now be edited independently.')
             self._editing_changed(False)
 
     @Property(int,notify=editChanged)
@@ -639,15 +664,20 @@ class Preview(QObject):
     def exportProgress(self): return self._export_progress
     @Property(str,notify=exportChanged)
     def exportStatus(self): return self._export_status
+    @Property(bool,notify=exportChanged)
+    def exportStatusError(self): return self._export_status_error
+
+    def _set_export_status(self,message,error=False):
+        self._export_status,self._export_status_error = message,error
 
     @Slot()
     def cut(self):
         if not self._clips or self.busy: return
         if self._clips.split_at(self._position):
-            self._status = 'Split added. Select a clip on the timeline to export it.'
+            self._set_status('Split added. Select a clip on the timeline to export it.')
             self._editing_changed()
         else:
-            self._status = 'Cannot split at a boundary, in an empty gap or through a crossfade.'
+            self._set_status('Cannot split at a boundary, in an empty gap or through a crossfade.',error=True)
         self.changed.emit()
     @Slot(int)
     @Slot(int,bool)
@@ -701,7 +731,7 @@ class Preview(QObject):
                 self.editChanged.emit()
                 self.projectChanged.emit()
         except ValueError as exc:
-            self._status = str(exc)
+            self._set_status(str(exc),error=True)
             self.changed.emit()
             self.editChanged.emit()
 
@@ -713,17 +743,17 @@ class Preview(QObject):
             if not math.isfinite(value) or value<0: raise ValueError()
             if self._clips.set_fade(key,value): self._editing_changed(False)
         except ValueError:
-            self._status = 'Invalid duration: enter a nonnegative number of seconds using a decimal point.'
+            self._set_status('Invalid duration: enter a nonnegative number of seconds using a decimal point.',error=True)
             self.changed.emit()
             self.editChanged.emit()
 
     @Slot()
     def joinSelected(self):
         if self._clips and self._clips.join():
-            self._status = 'Clips joined. Existing crossfades and outer fades were preserved.'
+            self._set_status('Clips joined. Existing crossfades and outer fades were preserved.')
             self._editing_changed()
         else:
-            self._status = 'Select exactly two touching or overlapping consecutive clips to join them.'
+            self._set_status('Select exactly two touching or overlapping consecutive clips to join them.',error=True)
             self.changed.emit()
 
     @Slot(float,float,result=float)
@@ -736,21 +766,21 @@ class Preview(QObject):
     @Slot()
     def deleteSelected(self):
         if self._clips and self._clips.delete_selected():
-            self._status = 'Clips removed from the timeline. Empty gaps were preserved.'
+            self._set_status('Clips removed from the timeline.' if self.hasTimelineClips else 'Timeline cleared.')
             self._editing_changed()
 
     @Slot(str,str,result=bool)
     def addSpace(self,side,text):
-        if self._clips is None or not self._source_order or self.busy: return False
+        if not self.hasTimelineClips or self.busy: return False
         try:
             value = float(text.strip())
             if not math.isfinite(value) or value<=0: raise ValueError('Enter a positive number of seconds using a decimal point.')
             self._clips.add_space(side,text.strip())
         except (ValueError,OverflowError) as exc:
-            self._status = str(exc)
+            self._set_status(str(exc),error=True)
             self.changed.emit()
             return False
-        self._status = 'Empty space added at project '+side+'.'
+        self._set_status('Empty space added at project '+side+'.')
         self._editing_changed()
         return True
 
@@ -761,7 +791,7 @@ class Preview(QObject):
         start,end = map(float,self._clips.gaps()[index])
         if self._clips.remove_gap(index):
             if self._position>=start: self._position = max(start,self._position-(end-start))
-            self._status = 'Empty gap removed.'
+            self._set_status('Empty gap removed.')
             self._editing_changed()
 
     @Slot(int,result='QVariantList')
@@ -802,10 +832,10 @@ class Preview(QObject):
         index = self._activate_index(index,True)
         if self._clips:
             if self._clips.duplicate_selection(index,target):
-                self._status = 'Clips duplicated.' if self.selectionCount>1 else 'Clip duplicated.'
+                self._set_status('Clips duplicated.' if self.selectionCount>1 else 'Clip duplicated.')
                 self._editing_changed()
             else:
-                self._status = 'Cannot duplicate: select consecutive clips in each lane; nested and triple overlaps are not supported.'
+                self._set_status('Cannot duplicate: select consecutive clips in each lane; nested and triple overlaps are not supported.',error=True)
                 self.changed.emit()
 
     @Slot(int,float)
@@ -813,10 +843,10 @@ class Preview(QObject):
         index = self._activate_index(index,True)
         if self._clips:
             if self._clips.move_selection(index,target):
-                self._status = 'Clips moved.' if self.selectionCount>1 else 'Clip moved.'
+                self._set_status('Clips moved.' if self.selectionCount>1 else 'Clip moved.')
                 self._editing_changed()
             else:
-                self._status = 'Cannot move: select consecutive clips in each lane; nested and triple overlaps are not supported.'
+                self._set_status('Cannot move: select consecutive clips in each lane; nested and triple overlaps are not supported.',error=True)
                 self.changed.emit()
 
     @Slot(int,str,float,float,bool,result='QVariantMap')
@@ -838,38 +868,64 @@ class Preview(QObject):
     def resizeClip(self,index,side,target):
         index = self._activate_index(index)
         if self._clips and self._clips.resize(index,side,target):
-            self._status = 'Edge updated. The original file is unchanged.'
+            self._set_status('Edge updated. The original file is unchanged.')
             self._editing_changed()
 
     @Slot()
     def duplicateSelected(self):
         if self._clips is None: return
         if self.selectionCount>1:
-            self._status = 'Cannot duplicate: select one clip with enough adjacent space.'
+            self._set_status('Cannot duplicate: select one clip with enough adjacent space.',error=True)
             self.changed.emit()
             return
         index = self._clips.selected
         if not self.selectionCount:
             index = next((i for i,clip in enumerate(self._clips.clips) if self._clip_start(clip)<=self._position<self._clip_end(clip)),-1)
         if index>=0 and self._clips.duplicate(index):
-            self._status = 'Clip duplicated into the adjacent space.'
+            self._set_status('Clip duplicated into the adjacent space.')
             self._editing_changed()
         else:
-            self._status = 'Cannot duplicate: select one clip with enough adjacent space.'
+            self._set_status('Cannot duplicate: select one clip with enough adjacent space.',error=True)
             self.changed.emit()
     @Slot()
     def undoCut(self):
         if self._clips:
+            if self._source_history(self._clips.undo_stack,self._clips.redo_stack,restore=True): return
             self._clips.undo()
             self._editing_changed()
     @Slot()
     def redoCut(self):
         if self._clips:
+            if self._source_history(self._clips.redo_stack,self._clips.undo_stack,restore=False): return
             self._clips.redo()
             self._editing_changed()
 
+    def _source_history(self,history,opposite,restore):
+        if not history or not isinstance(history[-1],SourceRemoval): return False
+        if self._pending_project or self._importing or self._exporting: return True
+        entry = history[-1]
+        if restore:
+            source = self._sources[entry.index]
+            try:
+                if project.source_info(source.path)!=self._source_identities[entry.index]:
+                    raise ValueError('The file has changed since it was imported.')
+                if any(i!=entry.index and self._sources[i].path==source.path for i in self._source_order):
+                    raise ValueError('Remove the newer import of this file first.')
+            except (OSError,ValueError) as exc:
+                reason = 'The source file is missing.' if isinstance(exc,FileNotFoundError) else str(exc)
+                self._set_status(f'Cannot restore {Path(source.path).name}: {reason}',error=True)
+                self.changed.emit()
+                return True
+        opposite.append(history.pop())
+        self._apply_source_removal(entry,restore)
+        return True
+
+    @Property(bool,notify=editChanged)
+    def hasTimelineClips(self): return any(model.clips for _,model in self._lanes())
+
     def export_spec(self,selected=True,normalize_audio=False,level=-1.,independent=False):
         if self._clips is None: raise ValueError('Wait for video indexing to finish.')
+        if not self.hasTimelineClips: raise ValueError('Add a clip to the timeline before exporting.')
         if selected and not self.selectionCount: raise ValueError('Select a timeline interval to export.')
         if not math.isfinite(level) or level>0: raise ValueError('Normalization level must be a finite number less than or equal to 0 dBFS.')
         clip = next((c for _,_,_,c in self._selected_items()),None) if selected else None
@@ -890,31 +946,31 @@ class Preview(QObject):
         try:
             spec = self.export_spec(selected,normalize_audio,level,independent)
             self._export_progress = 0.
-            self._export_status = 'Preparing export…'
+            self._set_export_status('Preparing export…')
             self._exporting = True
             self.export_task.start(spec,url.toLocalFile())
         except Exception as exc:
             self._exporting = False
-            self._export_status = str(exc)
+            self._set_export_status(str(exc),error=True)
         self.exportChanged.emit()
 
     @Slot()
     def cancelExport(self):
         if self._exporting:
-            self._export_status = 'Cancelling…'
+            self._set_export_status('Cancelling…')
             self.export_task.cancel()
             self.exportChanged.emit()
 
     @Slot(float,str)
     def _export_updated(self,fraction,text):
         self._export_progress = fraction
-        self._export_status = text
+        self._set_export_status(text)
         self.exportChanged.emit()
 
     @Slot(str,str)
     def _export_finished(self,result,message):
         self._exporting = False
-        self._export_status = message
+        self._set_export_status(message,error=result=='error')
         self.exportChanged.emit()
 
     @staticmethod
@@ -934,18 +990,21 @@ class Preview(QObject):
             url = value if isinstance(value,QUrl) else QUrl(str(value))
             if url.isLocalFile():
                 path = str(Path(url.toLocalFile()).resolve())
-                if path not in paths and path not in self._import_queue and all(self._sources[i].path!=path for i in self._source_order): paths.append(path)
+                if (path!=self._active_import_path and path not in paths and path not in self._import_queue
+                        and all(self._sources[i].path!=path for i in self._source_order)): paths.append(path)
         if not paths: return
         if not self._path and self._clips is None:
             first = paths.pop(0)
-            self.open_path(first)
+            self.open_path(first,importing=True)
         self._import_queue.extend(paths)
         self._start_import_next()
+        if self._import_queue: self.importStatusChanged.emit()
 
     def _start_import_next(self):
         if self._importing or self._clips is None or not self._import_queue or self._closed: return
         path = self._import_queue.pop(0)
         self._importing = True
+        self._begin_import(path)
         self.sourceChanged.emit(); self.projectChanged.emit()
         generation,cancelled = self._source_generation,self._import_cancel
         def run():
@@ -958,7 +1017,7 @@ class Preview(QObject):
                 self.sourceIndexed.emit(generation,'entry',(path,values['metadata'],values['index'],identity))
                 metadata = values['metadata']
                 build_visuals(path,metadata['origin'],metadata['duration']-metadata['origin'],metadata['audio_timeline'],cancelled,
-                              lambda kind,data:self.sourceIndexed.emit(generation,'visual',(path,kind,data)) if not self._closed else None)
+                              lambda kind,data:self.sourceIndexed.emit(generation,'visual',(path,identity,kind,data)) if not self._closed else None)
             except (OSError,ValueError,KeyError,TypeError) as exc:
                 if not cancelled.is_set() and not self._closed: self.sourceIndexed.emit(generation,'import-error',(path,str(exc)))
             finally:
@@ -971,7 +1030,7 @@ class Preview(QObject):
         if self._clips.insert_source(self._sources[index],position,'audio' if lane=='audio' else 'video'):
             self._editing_changed()
         else:
-            self._status = 'Cannot place source here. Both lanes need free space or a valid partial overlap.'
+            self._set_status('Cannot place source here. Both lanes need free space or a valid partial overlap.',error=True)
             self.changed.emit()
 
     @Slot(int)
@@ -980,12 +1039,31 @@ class Preview(QObject):
 
     def _extend_catalog(self,path,metadata,index,identity):
         first = not self._source_order
-        source,times = catalog_entry(path,metadata,index,self._sources)
-        if first: self._origin = source.origin
-        self._sources = (*self._sources,source)
-        self._source_order.append(len(self._sources)-1)
+        source_index = next((i for i,s in enumerate(self._sources)
+                             if s.path==path and self._source_identities[i]==identity),None)
+        if source_index is None:
+            source_index = self._index_catalog_source(path,metadata,index,identity)
+        source = self._sources[source_index]
+        self._source_order.append(source_index)
         self._bound_waveforms()
-        self._source_identities[path] = identity
+        if first or self._audio_timeline is None:
+            self._audio_timeline = source.audio_timeline
+        elif source.audio_timeline and self._audio_timeline.get('silence'):
+            self._audio_timeline = source.audio_timeline
+        self._has_audio = bool(self._audio_timeline)
+        if first:
+            self._path = path
+            self._name = Path(path).name
+            self.appendSource(source_index)
+        else:
+            self._editing_changed()
+        self.sourceChanged.emit()
+
+    def _index_catalog_source(self,path,metadata,index,identity):
+        source,times = catalog_entry(path,metadata,index,self._sources)
+        if not self._sources: self._origin = source.origin
+        self._sources = (*self._sources,source)
+        self._source_identities[len(self._sources)-1] = identity
         exact = tuple(self._clips.video.times)+times
         self._source_index = [float(t) for t in exact]
         self._source_duration = float(source.offset+source.duration)
@@ -1004,15 +1082,7 @@ class Preview(QObject):
         if denominator>2147483647: denominator = 1000000
         self._video_time_base = Fraction(1,denominator)
         self._video_pts = [round((t+Fraction(str(self._origin)))/self._video_time_base) for t in exact]
-        self._audio_timeline = next((s.audio_timeline for s in self._sources if s.audio_timeline),self._audio_timeline if self._retained_catalog_clock else None)
-        self._has_audio = bool(self._audio_timeline)
-        if first:
-            self._path = path
-            self._name = Path(path).name
-            self.appendSource(len(self._sources)-1)
-        else:
-            self._editing_changed()
-        self.sourceChanged.emit()
+        return len(self._sources)-1
 
     def _load_multi_project(self,path,document):
         if self._importing: return
@@ -1040,13 +1110,23 @@ class Preview(QObject):
     def _receive_source(self,generation,kind,data):
         if self._closed or generation!=self._source_generation: return
         if kind=='entry':
-            try: self._extend_catalog(*data)
-            except (ValueError,KeyError,OverflowError) as exc: self.projectError.emit(f'Cannot import source:\n{exc}')
+            try:
+                self._extend_catalog(*data)
+            except (ValueError,KeyError,OverflowError) as exc:
+                self._finish_import(False)
+                self.projectError.emit(f'Cannot import source:\n{exc}')
+            else:
+                self._finish_import(True)
         elif kind=='visual':
-            path,event,value = data
-            self._store_source_visual(path,event,value)
+            path,identity,event,value = data
+            source = next((s for i,s in enumerate(self._sources)
+                           if s.path==path and self._source_identities[i]==identity),None)
+            if source is None: return
+            self._store_source_visual(source,event,value)
             self._visual_revision += 1; self.visualsChanged.emit()
-        elif kind=='import-error': self.projectError.emit(f'Cannot import source:\n{data[0]}\n\n{data[1]}')
+        elif kind=='import-error':
+            self._finish_import(False)
+            self.projectError.emit(f'Cannot import source:\n{data[0]}\n\n{data[1]}')
         elif kind=='done':
             self._importing = False
             self.sourceChanged.emit(); self.projectChanged.emit()
@@ -1069,9 +1149,10 @@ class Preview(QObject):
             self._index_cancel.set(); self._import_cancel.set()
             self._index_cancel = threading.Event(); self._import_cancel = threading.Event()
             self._source_generation += 1
+            self._set_import_status('')
             self._sources = sources; self._clips = tracks
             self._restore_editor_settings(document)
-            self._source_identities = {entry[0]:entry[3] for entry in entries}
+            self._source_identities = {i:entry[3] for i,entry in enumerate(entries)}
             self._source_identity = entries[0][3] if entries else None
             self._path = sources[0].path if sources else ''
             self._name = Path(self._path).name
@@ -1107,13 +1188,14 @@ class Preview(QObject):
             # Reuse the bounded sequential import worker to populate visual caches.
             cancelled,generation = self._import_cancel,self._source_generation
             def visuals():
-                for source in sources:
+                for source,entry in zip(sources,entries):
                     if cancelled.is_set(): return
                     build_visuals(source.path,source.origin,float(source.duration),source.audio_timeline,cancelled,
-                                  lambda event,value,s=source:self.sourceIndexed.emit(generation,'visual',(s.path,event,value)) if not self._closed else None)
+                                  lambda event,value,s=source,identity=entry[3]:self.sourceIndexed.emit(
+                                      generation,'visual',(s.path,identity,event,value)) if not self._closed else None)
             threading.Thread(target=visuals,name='project-visuals',daemon=True).start()
 
-    def open_path(self,path):
+    def open_path(self,path,importing=False):
         if self._exporting: return
         path = str(Path(path).resolve())
         self._project_path = ''
@@ -1123,6 +1205,8 @@ class Preview(QObject):
         self._import_cancel = threading.Event()
         self._import_queue = []
         self._importing = False
+        self._active_import_path = ''
+        self._set_import_status('')
         self._sources = ()
         self._source_order = []
         self._retained_catalog_clock = False
@@ -1157,7 +1241,7 @@ class Preview(QObject):
         self.projectChanged.emit()
         self._timeline_origin = 0.
         self.editChanged.emit()
-        self._export_status = ''
+        self._set_export_status('')
         self.exportChanged.emit()
         self._cache.clear()
         self._cache_bytes = 0
@@ -1166,7 +1250,8 @@ class Preview(QObject):
         self._name = Path(path).name
         self._opening = True
         self._busy = False
-        self._status = 'Importing source…'
+        self._set_status('' if importing else 'Importing source…')
+        if importing: self._begin_import(path)
         self.provider.clear()
         self._revision += 1
         self.frameChanged.emit()
@@ -1178,16 +1263,16 @@ class Preview(QObject):
     def _receive_index(self,generation,kind,data):
         if generation != self._source_generation or self._closed: return
         if kind in ('waveform', 'thumbnails', 'visuals-error'):
-            if 0 not in self._source_order: return
             if kind == 'waveform': self._waveform = data
             elif kind == 'thumbnails': self._thumbnails = data
-            if self._sources: self._store_source_visual(self._sources[0].path,kind,data)
+            if self._sources: self._store_source_visual(self._sources[0],kind,data)
             self._visual_status = f'Timeline previews: {data}' if kind == 'visuals-error' else ('' if kind == 'thumbnails' else 'Preparing video thumbnails…')
             self._visual_revision += 1
             self.visualsChanged.emit()
         elif kind=='error':
             self._opening = False
-            self._status = f'Error: {data}'
+            self._finish_import(False)
+            self._set_status(f'Error: {data}',error=True)
             if self._pending_project:
                 self._pending_project = None
                 self.projectError.emit(self._status)
@@ -1253,7 +1338,7 @@ class Preview(QObject):
                 self._timeline_origin = float(self._clips.origin)
                 self._remember_project(path)
             self._source_identity = project.source_info(self._path)
-            self._source_identities = {self._path:self._source_identity}
+            self._source_identities = {0:self._source_identity}
             for _,model in self._lanes(): model.sources = self._sources
             if self._project_path: self._saved_catalog = self._catalog_state()
             self._render_frames = self._clips.frames(self._fps)
@@ -1263,9 +1348,10 @@ class Preview(QObject):
                 self._request(0.,False)
             self.projectChanged.emit()
             self.editChanged.emit()
-            if not self._busy and not self._playing: self._status = ''
+            if not self._busy and not self._playing: self._set_status('')
             self.changed.emit()
             self.sourceChanged.emit()
+            self._finish_import(True)
             self._start_import_next()
 
             cancelled = self._index_cancel
@@ -1302,7 +1388,7 @@ class Preview(QObject):
             self.provider.clear(self._width,self._height)
             self._revision += 1
             self.frameChanged.emit()
-            self._status = 'Empty timeline'
+            self._set_status('Empty timeline')
             self.changed.emit()
             return
         job = Job(self._generation,self._path,position,self._origin,self._duration,play,self._audio_timeline,self.effect_spans(),
@@ -1318,7 +1404,7 @@ class Preview(QObject):
         self.audio.request(self._generation,audio_job if play and self.audioEnabled else None)
         if cached is not None:
             self._show(self._generation,position,cached)
-        self._status = 'Preparing…' if play else 'Seeking…' if cached is None else ''
+        self._set_status('Preparing…' if play else 'Seeking…' if cached is None else '')
         self.changed.emit()
 
     @Slot(float)
@@ -1347,7 +1433,7 @@ class Preview(QObject):
             if not 0<=seconds<=self._duration: raise ValueError()
             self.seek(seconds)
         except ValueError:
-            self._status = 'Invalid time. Use hh:mm:ss.mmm or seconds with a decimal point.'
+            self._set_status('Invalid time. Use hh:mm:ss.mmm or seconds with a decimal point.',error=True)
             self.changed.emit()
     @Slot()
     def toggle(self):
@@ -1473,7 +1559,7 @@ class Preview(QObject):
         except Exception as exc:
             self._stop_transport()
             self._busy = False
-            self._status = f'Error: {exc}'
+            self._set_status(f'Error: {exc}',error=True)
             self.changed.emit()
 
     def _advance(self):
@@ -1493,7 +1579,7 @@ class Preview(QObject):
                     self._show(generation,stamp,image)
                     received = True
             if received:
-                self._status = ''
+                self._set_status('')
                 self.changed.emit()
             return
         if not self._audio_started:
@@ -1506,7 +1592,7 @@ class Preview(QObject):
             self._wall_start = time.perf_counter()
             self._audio_started = True
             self._busy = False
-            self._status = '' if self.audioEnabled else 'No audio output'
+            self._set_status('' if self.audioEnabled else 'No audio output')
         if self.audioEnabled:
             self._pump_audio()
             meter_time = self.sink.processedUSecs()/1000000.

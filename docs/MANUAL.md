@@ -37,8 +37,8 @@ commit. Portable copies retain the identity recorded when they were built.
 
 The window title marks unsaved changes with `*`. Opening another project or
 closing prompts to save, discard or cancel. File also lists up to ten recent
-projects. Undo/redo applies to timeline edits; importing a library entry is not
-undone by Undo.
+projects. Undo/redo applies to timeline edits and source removal. Importing a
+library entry is outside Undo.
 
 Projects use `.splicelet` files. They save sources, clips, names, gaps, trim
 reserves, fades, lane link mode, canvas, source order, listening volume and
@@ -52,17 +52,19 @@ There is no autosave.
 
 Use **File > Import sources...**, the Sources **Import** button, or drop files
 onto the preview, Sources/Properties panel, or timeline. Dropping files imports
-them; it does not place them at the timeline drop position. Multiple video/audio
-files are indexed in the background in
+them; it does not place them at the timeline drop position. The status bar shows
+the filename during import and confirms when it is added to **Sources**.
+Multiple video/audio files are indexed in the background in
 the supplied order. The first source is placed automatically; later sources
 enter the library without replacing the montage. Unsupported imports report an
 error while preserving existing clips.
 
 Drag a library row onto another row to reorder the Sources list without moving
 clips. The trash button above **+** removes a source from the project once
-neither lane uses it in a clip or trim reserve. To remove the last source, also
-remove any remaining timeline gaps. Removal discards the history needed to
-bring that source back.
+neither lane uses it in a clip or trim reserve. Undo restores the source to the
+list, then another Undo can restore the timeline edit that removed its clips.
+If the file is missing or has changed, the status bar shows an error and keeps
+the Undo entry available to retry.
 Drag a row onto the timeline to place it. The insertion marker snaps to
 boundaries; **Alt** bypasses snapping. Its **+** button or double-click appends
 it to the project. Placement adds the source to both lanes at the same time,
@@ -129,7 +131,7 @@ which includes everything between its outer boundaries.
 | Action | Control and behavior |
 |---|---|
 | Split | **C** or scissors: split before the displayed frame; it becomes the right clip's first frame. Empty clips are prevented. |
-| Delete | **Delete** or **Edit > Delete** removes selected clips and leaves gaps. Other clips stay in place. |
+| Delete | **Delete** or **Edit > Delete** removes selected clips. Other clips stay in place. Deleting the last clip on either lane clears the remaining gap. |
 | Close a gap | Hover the gap and click its trash icon. Later clips in that lane move left and the project shortens where possible. Undo restores it. |
 | Join | **J** or **Edit > Join** joins exactly two selected, touching or partially overlapping consecutive clips, retaining source pieces, crossfades and outer fades. |
 | Move | Drag a clip body. Dragging an unselected clip selects and moves it alone. |
@@ -168,7 +170,7 @@ The last clip can extend the project right, and the first can extend it left
 when its right side is occupied. Existing clips do not move automatically.
 
 **Edit > Add space at start... / Add space at end...** accepts positive seconds
-and adds project-wide black/silent space, including on empty timelines. These
+and adds project-wide black/silent space when the timeline contains a clip. These
 spaces save with the project and can be removed with gap trash buttons.
 
 ## Linked and independent lanes
@@ -253,6 +255,7 @@ narrow windows place scissors, zoom and listening controls in a second row.
 ## Export
 
 **File > Export video...** opens options, then the native save dialog.
+Export is available when at least one lane contains a clip.
 **All** is the default on every opening, even with clips selected. It exports
 the full project including edge/internal gaps. **Selected** must be chosen
 explicitly: it exports from the first selected start to the last selected end

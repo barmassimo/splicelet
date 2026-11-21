@@ -311,7 +311,7 @@ ApplicationWindow {
                 Action {
                     objectName: "exportAction"
                     text: "Export video..."; shortcut: "Ctrl+E"
-                    enabled: preview.indexedReady && preview.duration>0 && !preview.busy && !preview.importing && !preview.exporting && root.fileDialogsClosed
+                    enabled: preview.indexedReady && preview.hasTimelineClips && !preview.busy && !preview.importing && !preview.exporting && root.fileDialogsClosed
                     onTriggered: { properties.finishEditing(); timeInput.focus = false; exportOptions.open() }
                 }
             }
@@ -330,8 +330,8 @@ ApplicationWindow {
                 Action { objectName: "duplicateAction"; property string shortcutLabel: "D"; text: "Duplicate"; enabled: preview.indexedReady && !preview.busy && root.fileDialogsClosed; onTriggered: { properties.finishEditing(); preview.duplicateSelected() } }
                 MenuSeparator {}
                 Action { objectName: "unlinkAudioAction"; text: "Unlink audio"; enabled: preview.canUnlink && !preview.busy && root.fileDialogsClosed; onTriggered: { properties.finishEditing(); preview.unlinkAudio() } }
-                Action { objectName: "addStartSpaceAction"; text: "Add space at start..."; enabled: preview.canSaveProject && !preview.busy && root.fileDialogsClosed && timeline.dragIndex<0 && timeline.resizeIndex<0; onTriggered: root.openSpaceDialog("start") }
-                Action { objectName: "addEndSpaceAction"; text: "Add space at end..."; enabled: preview.canSaveProject && !preview.busy && root.fileDialogsClosed && timeline.dragIndex<0 && timeline.resizeIndex<0; onTriggered: root.openSpaceDialog("end") }
+                Action { objectName: "addStartSpaceAction"; text: "Add space at start..."; enabled: preview.canSaveProject && preview.hasTimelineClips && !preview.busy && root.fileDialogsClosed && timeline.dragIndex<0 && timeline.resizeIndex<0; onTriggered: root.openSpaceDialog("start") }
+                Action { objectName: "addEndSpaceAction"; text: "Add space at end..."; enabled: preview.canSaveProject && preview.hasTimelineClips && !preview.busy && root.fileDialogsClosed && timeline.dragIndex<0 && timeline.resizeIndex<0; onTriggered: root.openSpaceDialog("end") }
             }
             Menu {
                 id: viewMenu
@@ -510,7 +510,7 @@ ApplicationWindow {
                 Label { text: "seconds"; color: theme.muted }
             }
             Label { text: "Black video and silence."; color: theme.muted; font.pixelSize: 12 }
-            Label { text: spaceDialog.error; visible: text.length>0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: "#b33c35"; font.pixelSize: 12 }
+            Label { text: spaceDialog.error; visible: text.length>0; Layout.fillWidth: true; wrapMode: Text.WordWrap; color: theme.error; font.pixelSize: 12 }
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
@@ -528,7 +528,7 @@ ApplicationWindow {
         width: Math.min(root.width-48,640)
         modal: true
         standardButtons: Dialog.Ok
-        Label { width: parent.width; text: projectErrorDialog.message; wrapMode: Text.WrapAnywhere }
+        Label { width: parent.width; text: projectErrorDialog.message; textFormat: Text.PlainText; wrapMode: Text.WrapAnywhere; color: theme.error }
     }
     Connections {
         target: preview
@@ -643,7 +643,7 @@ ApplicationWindow {
                 }
                 CheckBox { id: independentChannels; objectName: "normalizeChannelsCheck"; text: "Normalize stereo channels independently" }
             }
-            Label { Layout.fillWidth: true; visible: exportOptions.error.length>0; text: exportOptions.error; color: "#b33c35"; font.pixelSize: 12; wrapMode: Text.WordWrap }
+            Label { Layout.fillWidth: true; visible: exportOptions.error.length>0; text: exportOptions.error; color: theme.error; font.pixelSize: 12; wrapMode: Text.WordWrap }
             RowLayout {
                 Layout.fillWidth: true
                 Item { Layout.fillWidth: true }
@@ -1015,9 +1015,18 @@ ApplicationWindow {
                     BusyIndicator { visible: preview.busy; running: visible; Layout.preferredWidth: 20; Layout.preferredHeight: 20 }
                     Label {
                         objectName: "statusText"
-                        text: [preview.exportStatus, preview.status, preview.loaded && !preview.indexedReady ? "Indexing…" : ""].filter(function(s) { return s.length>0 }).join(" · ")
+                        readonly property string indexStatus: preview.loaded && !preview.indexedReady ? "Indexing…" : ""
+                        function formatStatus(message, error) {
+                            const escaped = message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+                            return error && escaped ? '<b><font color="' + theme.error + '">' + escaped + '</font></b>' : escaped
+                        }
+                        text: [formatStatus(preview.importStatus, false), formatStatus(preview.exportStatus, preview.exportStatusError),
+                               formatStatus(preview.status, preview.statusError), indexStatus].filter(Boolean).join(" · ")
+                        textFormat: Text.StyledText
                         color: theme.muted; elide: Text.ElideMiddle; Layout.fillWidth: true; font.pixelSize: 11
-                        ToolTip.text: text; ToolTip.visible: statusMouse.containsMouse && truncated
+                        readonly property string fullStatus: [preview.importStatus, preview.exportStatus, preview.status, indexStatus].filter(Boolean).join(" · ")
+                        Accessible.name: fullStatus
+                        ToolTip.text: fullStatus; ToolTip.visible: statusMouse.containsMouse && truncated
                         MouseArea { id: statusMouse; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
                     }
                     ProgressBar { visible: preview.exporting; value: preview.exportProgress; Layout.preferredWidth: 140 }
