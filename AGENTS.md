@@ -90,17 +90,22 @@ PyAV, NumPy and FFmpeg in a project-local Conda environment.
 - Propose a MAJOR increment (the first number) for incompatible changes,
   explaining why, but obtain the user's explicit agreement before applying it;
   reset MINOR and PATCH to 0 when approved.
-- Assess incompatibility from the user's perspective. Changes to existing default
-  behavior (for example, the default export resolution) or new mandatory user
-  requirements warrant a MAJOR proposal. Requirements include external tools,
+- Assess incompatibility from the user's perspective. Propose a MAJOR increment
+  when existing projects or supported media become incompatible, an established
+  default setting changes (for example, the default export resolution), or
+  existing use gains a new mandatory requirement. Requirements include external tools,
   even when automatically installed: requiring network access to install them is
   itself a new requirement. An optional capability does not introduce a mandatory
   requirement if existing use remains available with the same defaults and
   requirements. Adding a configuration parameter preserves compatibility only
   when it is optional and leaving it unset preserves existing default behavior.
-  Internal implementation changes alone do not warrant MAJOR when user behavior
-  and requirements remain compatible. Apply these criteria before the MINOR/PATCH
-  rules; retain the export-quality approval requirements above.
+  Changes to editor interactions, feedback, and suggested filenames follow the
+  MINOR/PATCH rules when existing projects, formats, defaults, and requirements
+  remain compatible. For example, placing both lanes in one gesture or requiring
+  a clip to export a timeline still supports existing editing workflows.
+  Internal implementation changes follow the same compatibility criteria.
+  Apply these criteria before the MINOR/PATCH rules and retain the export-quality
+  approval requirements above.
 - As part of the requested release, update the version and CHANGELOG, commit
   the release metadata and create the matching `vMAJOR.MINOR.PATCH` tag, including
   exactly the suffix requested by the user, on the release commit. Never overwrite
