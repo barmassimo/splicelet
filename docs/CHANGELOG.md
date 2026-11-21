@@ -6,23 +6,24 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+## 1.10.0 — 2026-11-21
+
 ### Added
 
-- Reorder imported sources by dragging their rows. Projects remember source
-  order, listening volume and vertical waveform zoom.
-- Remove unused imported sources using the trash button in the Sources list.
-- Undo and redo source removal while retaining earlier timeline edits.
+- Reorder imported sources by dragging their rows. Projects save source order,
+  listening volume and vertical waveform zoom.
+- Remove unused sources from the Sources list and undo or redo their removal
+  within the editing session.
+- Show the current filename, queued files and completion in the import status.
 
 ### Changed
 
-- Place a source on both lanes when dragging it to the timeline or using **+**,
+- Dragging a source to the timeline or using **+** places it on both lanes,
   including in Unlinked mode.
-
-- Suggest `<source>_exported.mp4` when exporting the whole project with one source.
-- Highlight error messages in red, including blocked source removal.
-- Show the filename during import and confirm when it is added to Sources.
-- Clear the remaining gap when the last timeline clip is deleted and disable
-  export until the timeline contains a clip.
+- Deleting the final clip clears the remaining gap. Export requires at least
+  one clip.
+- Suggest `<source>_exported.mp4` for full exports from single-source projects.
+- Show errors in red, including when source removal is blocked.
 
 ## 1.9.0 — 2026-11-18
 
