@@ -1,8 +1,7 @@
 # Splicelet
 
 A local Windows video editor for straightforward, non-destructive editing.
-Built with Python, PySide6/QML, PyAV, NumPy and FFmpeg. All media processing
-runs on your computer.
+All media processing runs on your computer.
 
 ![Splicelet workspace with clip properties, video preview and timeline](screenshot.png)
 
@@ -21,7 +20,8 @@ powershell -NoProfile -File scripts/bootstrap.ps1
 & '.\Launch Splicelet.cmd'
 ```
 
-Bootstrap detects Conda and creates the pinned environment inside the repository.
+Bootstrap creates the pinned environment inside the repository without changing
+base Conda. The UI currently uses Windows fonts.
 If detection fails, pass its Python with `-CondaPython` as explained in
 [setup](docs/DEVELOPMENT.md#environment-and-launch).
 No media is bundled: import your own files with **Ctrl+I** or drop them onto the

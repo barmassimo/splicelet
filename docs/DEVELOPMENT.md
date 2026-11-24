@@ -12,33 +12,37 @@ Requirements for source development are **64-bit Windows**, PowerShell and a
 working Anaconda/Miniconda installation whose Python can run `python -m conda`.
 Bootstrap needs network access to the conda-forge package URLs in the lock file.
 No globally installed PySide6, FFmpeg, NumPy or Python packages are required.
+Use project-local environments and tools for any future runtime additions.
+Existing Conda is a bootstrap prerequisite; the Visual Studio C++ runtime may
+be system-wide. Always warn before installing or updating anything at system
+level, including that runtime; bootstrap does not install these prerequisites.
 
 ```powershell
 powershell -NoProfile -File scripts/bootstrap.ps1
 & '.\Launch Splicelet.cmd'
 ```
 
-Bootstrap looks for Conda using `CONDA_PYTHON_EXE`, `CONDA_EXE`, Conda executables
-on PATH, then `miniconda3`/`anaconda3` folders under the current user profile,
-Local AppData and ProgramData. It checks that the selected Python can run
-`python -m conda` before creating the environment. An explicit `-CondaPython`
-overrides detection; use it for custom installations, for example:
+Conda detection checks `CONDA_PYTHON_EXE`, `CONDA_EXE`, PATH, then
+`miniconda3`/`anaconda3` under the user profile, Local AppData and ProgramData.
+Override detection for a custom installation:
 
 ```powershell
 powershell -NoProfile -File scripts/bootstrap.ps1 -CondaPython (Join-Path $env:USERPROFILE 'miniconda3\python.exe')
 ```
 
-It creates `.envs/video-tech` **inside this repository**, using `.conda-pkgs` as
-its package cache. The name is a project convention shared by the scripts, not
-a pre-existing named environment that users must create or activate globally.
-Do not rename the prefix without updating its consumers. Base Conda is unchanged.
-Bootstrap is needed only when creating/recreating the environment.
+Bootstrap creates `.envs/video-tech` with cache `.conda-pkgs`, leaving base Conda
+unchanged. Scripts share this prefix; do not rename it without updating consumers.
+Rerun bootstrap only to create/recreate the environment.
 
-`environment.yml` declares dependencies, including the required `qt6-multimedia`
-package in addition to `pyside6`. `environment-win-64.lock` pins the Windows
-packages and takes precedence during bootstrap. It is not a cross-platform lock.
+`environment.yml` declares dependencies; `qt6-multimedia` is required alongside
+`pyside6` for `QAudioSink`. The Windows-only `environment-win-64.lock` takes precedence.
 Launchers configure the local runtime's DLL paths and `CONDA_PREFIX` themselves.
 Development FFmpeg is resolved from that runtime's `Library/bin`, not system PATH.
+
+Reproducibility limits: the explicit lock pins package URLs but does not contain
+expected SHA-256 hashes; build-tool requirements pin versions without hashes.
+Neither provides the official-source SHA-256 verification required for new
+downloads by AGENTS. A hash-verified dependency manifest remains future work.
 
 To open an existing source/project directly, substitute your own file path:
 
@@ -46,8 +50,47 @@ To open an existing source/project directly, substitute your own file path:
 powershell -NoProfile -File scripts/launch-splicelet.ps1 -Source '.\media\example.mkv'
 ```
 
-No media is bundled or required to open the empty editor. Restart after code
-changes. The source launcher accepts `-Muted` and `-SmokeTest` as well.
+The source launcher also accepts `-Muted` and `-SmokeTest`. No media is bundled.
+
+### Icon and fonts
+
+The application icon source is `splicelet/assets/splicelet.svg`; portable builds
+generate PNG/ICO assets from it. Keep the icon in the window and distributions.
+
+Fonts are currently a system dependency: QML requests Windows **Segoe UI** and
+**Consolas**, and offscreen startup registers them from the Windows Fonts folder
+when Qt finds no fonts. Fonts are not explicitly bundled by the application.
+Prefer licensed bundled fonts for future UI work; replacing these fonts requires
+layout verification and license/packaging review. Do not copy Windows font files
+into distributions without redistribution rights.
+
+## Release procedure
+
+A version/release request authorizes the release commit and tag, not GitHub
+publication. Follow [AGENTS](../AGENTS.md#versions-and-releases):
+
+1. Work on main unless another branch is requested. Inspect status, tags, commits
+   and the cumulative diff since the latest reachable stable version tag, or the
+   latest tag with exactly the requested suffix. If none exists, clarify the baseline.
+2. Choose the increment from all those changes. Obtain agreement before a MAJOR
+   increase; preserve the exact requested suffix.
+3. Update `__version__` and consolidate Unreleased notes. Run relevant checks,
+   commit the intended changes and tag that release commit as `v<version>`.
+4. Verify the tag resolves to the intended commit, its version matches that
+   commit's `__version__`, and the build tree is clean. Any mismatch is an error;
+   stop rather than moving a tag or silently changing the version. Build afterward.
+
+Release artifact identity uses `v<version>-<short-hash>[-modified]`, for example
+`v1.2.3-test-abcdef0-modified` for a local modified build. Tagged release builds
+must be clean. Hash/state are provenance, separate from the semantic version.
+The current app displays `1.2.3 (abcdef0, modified)` instead; artifact naming and
+tag/version rejection are release-procedure rules, not automated build checks.
+The current portable spec parses only a numeric version, so suffixed portable
+builds need a spec update before use.
+
+No GitHub release workflow is configured. If publication is requested, use manual
+dispatch or a version-tag push trigger. Do not publish on ordinary branch pushes.
+Binary publication additionally requires resolving the licensing section below.
 
 ## Portable build
 
@@ -115,30 +158,20 @@ After bootstrap, run the maintained suite with one command:
 powershell -NoProfile -File scripts/run-tests.ps1
 ```
 
-This runs 21 isolated processes sequentially, including build identity, source feasibility,
+This runs isolated processes sequentially, including build identity, source feasibility,
 application smoke, all maintained focused probes and source/proxy checks. No
 private recordings or media downloads are required. Each process has a timeout;
 failures are recorded without skipping later checks. Logs and an aggregate report
 are written to a unique directory under `artifacts/test-suite/`. The command
 returns nonzero if any included check fails.
 
-`scripts/run-tests.ps1` is the single test launcher. For focused checks, invoke
-the individual Python probe after configuring the runtime paths below.
-
 Build the portable folder first, then add `-Portable` to include its isolated
-smoke probe. The retired QMediaPlayer feasibility experiment is preserved only
-in the [historical report](history/TECHNICAL_RESULTS.md#qtqml-probe); its executable
-probe and runner options have been removed. Qt Multimedia remains a runtime
-dependency for `QAudioSink`.
+smoke probe.
 
 
-Run checks appropriate to a change. Documentation changes require link/command
-review; QML changes require visual inspection, and audio changes require listening.
-Numerical PCM tests and muted/offscreen UI checks do not establish perceived sync,
-device latency or listening quality. Report the checks actually run; do not
-append routine pass counts or screenshots to permanent design documentation.
-Crossfade, multi-source and project probes use isolated INI settings under their
-artifact directories for UI persistence checks.
+Review links/commands for documentation changes, visually inspect QML and listen
+for audio changes. Muted/offscreen/PCM checks do not establish perceived sync or
+device latency/quality. Crossfade, multi-source and project probes isolate INI settings.
 
 For direct Python probes, configure the project DLL paths in the current session:
 
@@ -160,14 +193,14 @@ integration fixture. Report paths are relative to `artifacts/`.
 | `probe_timeline_edits.py` | Gaps, mapping, joins, reserves, duplication and history | `timeline-tests/report.json` |
 | `probe_clip_effects.py` | PCM/video fades, seeks, joins and preservation | `effects-tests/report.json` |
 | `probe_audio_tracks.py` | Independent lanes, mapping, gestures and persistence | `audio-track-tests/report.json` |
-| `probe_group_edits.py` | Range/rectangle selection, mixed audio/video groups, exact offsets, Ctrl+drag copies and native copy cursor, collision rejection and atomic history | `group-edit-tests/report.json` |
-| `probe_crossfades.py` | Mixed PCM/video, PTS schedules, preview recovery and VFR holds, noninteger average-rate exports and unchanged transition PTS/pixels, compound joins (exact before/after decoded preview and full/partial exports), persistence/history, overlap interaction and cancellation | `crossfade-tests/report.json` |
+| `probe_group_edits.py` | Mixed-lane selection/moves/copies, copy cursor, collisions and atomic history | `group-edit-tests/report.json` |
+| `probe_crossfades.py` | PCM/video transitions, PTS/VFR, preview recovery, compound equivalence, persistence and cancellation | `crossfade-tests/report.json` |
 | `probe_multi_source.py` | Mixed sources/canvases/cadences, PCM, projects, external file drops across the workspace, library gestures and safety | `multi-source-tests/report.json` |
 | `probe_timeline_visuals.py` | Peaks, thumbnails, retained ranges, caches and QML zoom/pan | `timeline-visual-tests/report.json` |
 | `probe_export_options.py` | Export scope/defaults, normalization, AAC references and cancellation | `export-option-tests/report.json` |
-| `probe_export_seeks.py` | Late/reordered cuts, overlaps, partial windows, single-frame/irregular-tail exports, long VFR holds and fractional container origins; exact decoded audio/video equality against unbounded input reads | `export-seek-tests/report.json` |
+| `probe_export_seeks.py` | Bounded seeks versus unbounded reads: exact decoded A/V, cuts, overlaps, VFR/tails and container origins | `export-seek-tests/report.json` |
 | `probe_playhead_clock.py` | Delayed/absent video, transport clock, displayed-frame fades and paused seeks | `playhead-clock-tests/report.json` |
-| `probe_audio_meter.py` | Stereo sample peaks, float/int16 and partial writes, unchanged device bytes, mute/zero-volume activity, bounded queue and light/dark compact layouts | `audio-meter-tests/report.json` |
+| `probe_audio_meter.py` | Peaks, partial writes, unchanged device bytes, mute, bounded queue and layouts | `audio-meter-tests/report.json` |
 
 The synthetic source checks are included in the full suite and can also run alone:
 
@@ -181,13 +214,11 @@ transitions and encoding; report: `artifacts/report.json`.
 ### Generated integration fixture
 
 `scripts/test_fixture.py` creates `artifacts/test-fixtures/v1/integration.mkv`
-on first use. It uses the project FFmpeg to generate a moving 640×360 test pattern,
-H.264 with B-frames and GOPs up to 240 frames, plus distinct stereo tones in
-24-bit PCM at 48 kHz. It contains 8910 video frames over approximately 297.1 s,
-an irregular final frame interval of approximately 134 ms, and 14253056 samples
-per audio channel, ending about 162 ms before video. The duration preserves
-smoke operations at 180/240 s; this is low-resolution correctness coverage,
-not an HD performance benchmark or a reconstruction of the deleted recording.
+on first use: a moving 640×360 H.264 pattern with B-frames/long GOPs and distinct
+48 kHz stereo PCM tones. Approximately 297 s supports late-seek checks at
+180/240 s; an irregular final frame and shorter audio exercise tail handling.
+Exact generator parameters live in that script. This tests correctness, not
+HD performance or equivalence to a private recording.
 
 Generation validates actual decoded PTS, frame count and sample count. A manifest
 stores the generator version, size and SHA-256. Later calls verify and reuse it;
@@ -226,12 +257,9 @@ $env:QT_QPA_PLATFORM = 'windows'
 Remove-Item Env:QT_QPA_PLATFORM
 ```
 
-This installs the same native frame filter as startup, opens and operates real
-windows, and writes the same appearance report and captures. Its QTest clicks
-still bypass OS hit testing: also check category clicks, hamburger reopen reset,
-double-click maximize/restore, icon system-menu/double-click close, and dragging
-with real mouse input after changes
-to the native frame. Allow the probe to finish before interacting with its windows.
+The probe uses startup's native frame filter, but QTest bypasses OS hit testing.
+After it finishes, verify menus/reopen reset, caption maximize/restore, icon
+system-menu/close and dragging with real mouse input.
 
 `probe_clip_export.py`, `probe_splicelet_audio.py`, `probe_group_edits.py`,
 `probe_real_source.py` and `probe_portable.py` accept an optional source argument.
@@ -258,13 +286,10 @@ video/audio recording, for example:
 & "$SpliceletRuntime\python.exe" scripts/probe_real_source.py '.\media\example.mkv'
 ```
 
-The probe
-includes a 15-second proxy comparison starting at minute 2, so that input must
+The probe includes a 15-second proxy comparison starting at minute 2, so input must
 be sufficiently long. Its generated references and report are written under
 `artifacts/real`; this does not implement an editor proxy workflow. Measurements
 from the synthetic fixture are not real-recording performance measurements.
-The original private recording is no longer required by any maintained check;
-its early measurements remain only in the historical reports.
 
 ### Known validation limits
 
@@ -274,7 +299,7 @@ inspect current warnings and reproduce against a baseline before attributing reg
 Muted tests do not replace listening; high-resolution/GPU/device and clean-machine
 distribution claims require their own evidence.
 
-Initial measurements are archived in [history](history/TECHNICAL_RESULTS.md) and
-the [real-source report](history/REAL_SOURCE_RESULTS.md). They are not maintained
-as current test results. Generated reports/captures may contain absolute source
-paths: `artifacts/`, `media/` and runtime/cache directories are excluded from Git. Review generated files before sharing them separately.
+Initial [synthetic](history/TECHNICAL_RESULTS.md) and
+[real-source](history/REAL_SOURCE_RESULTS.md) measurements are historical.
+Generated reports may contain absolute source paths; review before sharing.
+Artifacts, media and runtime/cache directories are excluded from Git.

@@ -6,6 +6,12 @@ independent of each other and of the public Git history.
 
 ## Unreleased
 
+### Changed
+
+- Shorten development and design documentation; clarify local dependencies,
+  system-install warnings, font requirements and release/tag verification rules.
+- Correct the manual: source placement affects both lanes in Unlinked mode.
+
 ## 1.10.0 — 2026-11-21
 
 ### Added

@@ -7,18 +7,12 @@ For installation, see the [README](../README.md).
 ## Workspace and projects
 
 Open `Launch Splicelet.cmd`. The left panel switches between **Properties** and
-**Sources**. The three-line button in the window title bar, or **Ctrl+M**,
-reveals **File / Edit / View / Help** horizontally beside it, temporarily hiding
-the window title until the menu closes. Every opening starts with no category
-selected. Hover over a category to open its commands and move across categories
-to switch menus; clicking and keyboard navigation also remain available. Commands open
-below their category; second-level menus open to the side. The side panel stays
-available and opening the menu does not resize the workspace. Esc, the three-line
-button, or clicking the preview/timeline dismisses it. Drag the title bar to move
-the window; double-click it to maximize/restore. Windows window controls remain
-available on the right. The Splicelet icon to the left of the three-line button
-opens the Windows system menu; double-clicking the icon closes the application,
-with the usual save/discard/cancel prompt for unsaved changes.
+**Sources**. The title-bar three-line button or **Ctrl+M** reveals
+**File / Edit / View / Help**, temporarily hiding the title. Hover, click or use
+the keyboard to open categories. Each opening starts with no category selected;
+the workspace stays available. Esc, the button or a preview/timeline click closes
+the menu. Drag the title bar to move; double-click to maximize/restore. The app
+icon opens the Windows system menu; double-click closes with unsaved-change protection.
 **View > Night theme** saves a per-user appearance preference.
 Authored UI text is English; native file dialogs follow Windows language settings.
 Numeric fields require a decimal point, such as `6.25`.
@@ -139,22 +133,17 @@ which includes everything between its outer boundaries.
 | Trim | Drag a clip edge to hide/reveal source material without changing speed or the opposite edge. |
 | Duplicate | **D** or **Edit > Duplicate** copies the selected clip, or the clip under the playhead without a selection. |
 
-A selected group moves together only when consecutive in each selected lane.
-Internal gaps remain; an unselected clip between selected clips blocks movement.
-After unlinking, dragging any selected clip moves the selected video and audio
-clips by the same amount, retaining their relative timing without relinking them.
-An invalid overlap in either lane cancels the entire move. Delete also removes
-the selection from both lanes as one undoable operation. Join requires a
-selection in one lane; **D** duplication requires exactly one clip.
-Ctrl+drag copies the same consecutive selection that a normal drag would move,
-including selected clips in both unlinked lanes. Releasing Ctrl switches back
-to moving. Originals and other clips stay in place; invalid nested or triple
-overlaps reject the whole copy. A copy selects the duplicates and takes one undo
-entry. Ctrl+click without dragging still toggles selection.
-Moves never ripple other clips and produce one undo entry. Edges snap to other
-boundaries and the playhead; **Alt** bypasses snapping. Dragging near a viewport
-edge scrolls. Partial outer overlaps can create crossfades, but another clip
-cannot occupy an internal group gap.
+Moves and Ctrl+drag copies require consecutive selections in each lane. They
+preserve internal gaps and relative audio/video timing, including across unlinked
+lanes. Invalid overlap in either lane rejects the whole operation. Partial outer
+overlaps can create crossfades; another clip cannot occupy an internal group gap.
+Each move, copy or mixed-lane deletion takes one Undo entry. Copies select the
+duplicates; other clips stay in place. Releasing Ctrl switches back to moving;
+Ctrl+click without dragging still toggles selection. Join requires one selected
+lane; **D** requires exactly one clip.
+
+Edges snap to boundaries and the playhead; **Alt** bypasses snapping. Dragging
+near a viewport edge scrolls.
 
 Trimming retains at least one frame and respects available source material.
 Holding a clip edge without dragging does not resize or scroll the timeline;
@@ -184,8 +173,8 @@ After unlinking, click a clip to choose the active lane. Splitting and gap closu
 affect only that lane, so close matching gaps separately to preserve alignment.
 Trimming affects the dragged clip. A selection can span both lanes for movement,
 deletion and selection-window export; this does not restore the global link.
-Library drops affect the destination lane; **+** appends video files to video
-and audio files to audio. Seeking, movement and trimming snap across lanes.
+Library drops and **+** place sources on both lanes, even when unlinked.
+Seeking, movement and trimming snap across lanes.
 Add-space commands still affect both lanes. Additional mixing/overlay lanes
 are not available.
 
@@ -213,17 +202,13 @@ Both trim edges remain reachable; dragging within the overlap moves the selected
 clip. Nested clips, triple overlaps and splits through a transition are blocked.
 Separate the clips before cutting inside that interval.
 
-Joining overlapping clips creates one compound clip without rendering or
-re-encoding media. It appears as a single clip without internal crossfade
-highlighting; transitions retain their original timing and manual fades.
-Move, duplicate, delete and Undo operate on the whole
-clip. Outer trims edit the first/last constituent within its source reserves;
-they cannot pass an internal crossfade. Splits outside transitions remain
-available. Properties edits the first constituent's fade-in and the last
-constituent's fade-out; existing internal fades are retained. Further joins may
-extend the compound clip. To adjust an internal overlap as separate clips,
-undo the join. Projects containing compound clips use format 4 and
-require an application version supporting that format.
+Joining overlaps creates one compound clip without re-encoding, preserving
+internal timing/fades but hiding transition highlights. Move, duplicate, delete
+and Undo act on the whole clip. Outer trims respect constituent reserves and
+cannot cross an internal transition; splits outside transitions remain available.
+Properties edits only the first fade-in/last fade-out. Further joins can extend
+the compound; undo the join to adjust internal overlaps separately. These projects
+use format 4 and require an application supporting it.
 
 ## Timeline view
 
